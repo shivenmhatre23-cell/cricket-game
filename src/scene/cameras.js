@@ -52,6 +52,11 @@ export class CameraManager {
       }
     };
 
+    // Bat impact micro-trauma state
+    this.shakeIntensity = 0;
+    this.shakeTimer = 0;
+    this.maxShakeDuration = 0.12;
+
     // Initialize camera position
     const initPreset = this.presets[this.currentMode];
     this.camera.position.copy(initPreset.pos);
@@ -75,8 +80,17 @@ export class CameraManager {
     return CAMERA_NAMES[this.currentMode];
   }
 
+  // Apply subtle micro-shake impulse upon bat impact
+  applyImpactShake(intensity = 0.05, duration = 0.10) {
+    this.shakeIntensity = Math.min(0.12, intensity);
+    this.shakeTimer = Math.min(0.20, duration);
+    this.maxShakeDuration = Math.max(0.01, duration);
+  }
+
   // Smoothly resets camera when a new ball / delivery starts
   resetToDeliveryStart() {
+    this.shakeTimer = 0;
+    this.shakeIntensity = 0;
     // If was in dynamic ball follow cam, return to batting broadcast
     if (this.currentMode === CAMERA_MODES.BALL_FOLLOW) {
       this.currentMode = this.defaultMode;
@@ -143,6 +157,15 @@ export class CameraManager {
 
     // Anti-Clipping Guard: Ensure camera never penetrates pitch turf or ground
     desiredPos.y = Math.max(desiredPos.y, 1.35);
+
+    // Subtle impact micro-shake impulse
+    if (this.shakeTimer > 0) {
+      this.shakeTimer = Math.max(0, this.shakeTimer - delta);
+      const traumaRatio = this.shakeTimer / this.maxShakeDuration;
+      const currentShake = traumaRatio * this.shakeIntensity;
+      desiredPos.x += (Math.random() - 0.5) * currentShake;
+      desiredPos.y += (Math.random() - 0.5) * currentShake * 0.6;
+    }
 
     // Smooth dampening interpolation
     const lerpSpeed = Math.min(delta * 5.2, 1.0);

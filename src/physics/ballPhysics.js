@@ -16,13 +16,13 @@ export class BallPhysics {
     this.mesh.castShadow = true;
     this.scene.add(this.mesh);
 
-    // Stitched Seam Ring
+    // Stitched Seam Ring (oriented dynamically based on bowler profile)
     const seamGeo = new THREE.TorusGeometry(0.091, 0.007, 8, 36);
     const seamMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
-    const seamMesh = new THREE.Mesh(seamGeo, seamMat);
-    this.mesh.add(seamMesh);
+    this.seamMesh = new THREE.Mesh(seamGeo, seamMat);
+    this.mesh.add(this.seamMesh);
 
-    // 2. Pitch Bounce Marker
+    // 2. Pitch Bounce Marker (Pre-bounce prediction ring)
     const markerGeo = new THREE.RingGeometry(0.2, 0.35, 32);
     markerGeo.rotateX(-Math.PI / 2);
     const markerMat = new THREE.MeshBasicMaterial({
@@ -34,6 +34,20 @@ export class BallPhysics {
     this.bounceMarker = new THREE.Mesh(markerGeo, markerMat);
     this.bounceMarker.position.set(0, 0.03, 4.4);
     this.scene.add(this.bounceMarker);
+
+    // 2b. Pitch Bounce Puff Ring (subtle turf impact feedback on bounce)
+    const puffGeo = new THREE.RingGeometry(0.08, 0.26, 24);
+    puffGeo.rotateX(-Math.PI / 2);
+    const puffMat = new THREE.MeshBasicMaterial({
+      color: 0xddc088,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide
+    });
+    this.bouncePuffMesh = new THREE.Mesh(puffGeo, puffMat);
+    this.bouncePuffMesh.visible = false;
+    this.scene.add(this.bouncePuffMesh);
+    this.bouncePuffTimer = 0;
 
     // 3. Bat Contact Visual Impact Effect (Flash ring)
     const impactGeo = new THREE.RingGeometry(0.05, 0.35, 24);
@@ -47,6 +61,23 @@ export class BallPhysics {
     this.impactMesh.visible = false;
     this.scene.add(this.impactMesh);
     this.impactTimer = 0;
+
+    // 3b. Bat Contact Sparks (12 pre-allocated points)
+    const sparkCount = 12;
+    const sparkGeo = new THREE.BufferGeometry();
+    this.sparkPositions = new Float32Array(sparkCount * 3);
+    this.sparkVelocities = new Float32Array(sparkCount * 3);
+    sparkGeo.setAttribute('position', new THREE.BufferAttribute(this.sparkPositions, 3));
+    const sparkMat = new THREE.PointsMaterial({
+      color: 0xfff59d,
+      size: 0.08,
+      transparent: true,
+      opacity: 0
+    });
+    this.sparkMesh = new THREE.Points(sparkGeo, sparkMat);
+    this.sparkMesh.visible = false;
+    this.scene.add(this.sparkMesh);
+    this.sparkTimer = 0;
 
     // 4. Ball motion physics state
     this.position = new THREE.Vector3(0, 2, -10);
@@ -140,6 +171,12 @@ export class BallPhysics {
     this.fielderHolding = null;
     this.isThrowing = false;
     this.bounceMarker.visible = true;
+    this.bouncePuffTimer = 0;
+    if (this.bouncePuffMesh) this.bouncePuffMesh.visible = false;
+    this.sparkTimer = 0;
+    if (this.sparkMesh) this.sparkMesh.visible = false;
+    this.impactTimer = 0;
+    if (this.impactMesh) this.impactMesh.visible = false;
     this.updateTrail();
   }
 
@@ -213,25 +250,122 @@ export class BallPhysics {
     const vy = (targetPos.y - startPos.y - 0.5 * (-9.8) * (timeToBounce * timeToBounce)) / timeToBounce;
 
     this.velocity.set(vx, vy, vz);
+
+    // Dynamic seam alignment & aerodynamic trail color per bowling archetype
+    if (this.seamMesh) {
+      if (this.bowlerProfileId === 'SPIN_BOWLER' || this.bowlingType === 'Crafty Spinner') {
+        this.seamMesh.rotation.set(0.45, 0.2, 0.6);
+        if (this.trailLine) {
+          this.trailLine.material.color.setHex(0xffcc80);
+          this.trailLine.material.opacity = 0.55;
+        }
+      } else if (this.bowlerProfileId === 'SWING_BOWLER' || this.bowlingType === 'Swing Maestro') {
+        const tilt = (this.swingAmount >= 0 ? 1 : -1) * 0.38;
+        this.seamMesh.rotation.set(0, Math.PI / 2, tilt);
+        if (this.trailLine) {
+          this.trailLine.material.color.setHex(0x80d8ff);
+          this.trailLine.material.opacity = 0.50;
+        }
+      } else {
+        // Express Fast / Disciplined Seamer: pristine upright seam presentation
+        this.seamMesh.rotation.set(0, Math.PI / 2, 0);
+        if (this.trailLine) {
+          this.trailLine.material.color.setHex(0xffffff);
+          this.trailLine.material.opacity = 0.60;
+        }
+      }
+    }
+
     soundManager.playWhoosh();
   }
 
-  // Trigger visual impact effect
-  showImpactEffect(pos) {
+  // Trigger differentiated visual impact effect
+  showImpactEffect(pos, timingQuality = 'GOOD') {
+    if (timingQuality === 'MISSED') return;
+
     this.impactMesh.position.copy(pos);
     this.impactMesh.rotation.x = -Math.PI / 2;
-    this.impactMesh.material.opacity = 0.9;
+    this.impactMesh.scale.set(1, 1, 1);
     this.impactMesh.visible = true;
-    this.impactTimer = 0.22; // lasts 0.22s
+
+    if (timingQuality === 'PERFECT') {
+      this.impactMesh.material.color.setHex(0xffea00); // Brilliant gold
+      this.impactMesh.material.opacity = 1.0;
+      this.impactTimer = 0.24;
+      this.emitSparks(pos, 1.2);
+    } else if (timingQuality === 'GOOD') {
+      this.impactMesh.material.color.setHex(0xffffff); // Pure crisp white
+      this.impactMesh.material.opacity = 0.85;
+      this.impactTimer = 0.18;
+      this.emitSparks(pos, 0.6);
+    } else if (timingQuality === 'EARLY' || timingQuality === 'LATE') {
+      // Edge snick: thin orange/amber friction ring
+      this.impactMesh.material.color.setHex(0xff9800);
+      this.impactMesh.material.opacity = 0.70;
+      this.impactMesh.scale.set(0.7, 0.7, 0.7);
+      this.impactTimer = 0.14;
+      this.emitSparks(pos, 0.35);
+    } else {
+      // DEFENSIVE block: soft grey chalk ring
+      this.impactMesh.material.color.setHex(0x90a4ae);
+      this.impactMesh.material.opacity = 0.55;
+      this.impactMesh.scale.set(0.5, 0.5, 0.5);
+      this.impactTimer = 0.10;
+    }
+  }
+
+  emitSparks(pos, speedMult = 1.0) {
+    if (!this.sparkMesh) return;
+    this.sparkMesh.position.copy(pos);
+    this.sparkMesh.visible = true;
+    this.sparkMesh.material.opacity = 0.95;
+    this.sparkTimer = 0.18;
+
+    const posAttr = this.sparkMesh.geometry.attributes.position;
+    const arr = posAttr.array;
+    for (let i = 0; i < 12; i++) {
+      const idx = i * 3;
+      arr[idx] = 0;
+      arr[idx + 1] = 0;
+      arr[idx + 2] = 0;
+
+      const angle = Math.random() * Math.PI * 2;
+      const speed = (1.6 + Math.random() * 2.4) * speedMult;
+      this.sparkVelocities[idx] = Math.cos(angle) * speed;
+      this.sparkVelocities[idx + 1] = (0.6 + Math.random() * 2.0) * speedMult;
+      this.sparkVelocities[idx + 2] = Math.sin(angle) * speed;
+    }
+    posAttr.needsUpdate = true;
+  }
+
+  showBouncePuff(pos) {
+    if (!this.bouncePuffMesh) return;
+    this.bouncePuffMesh.position.set(pos.x, 0.02, pos.z);
+    this.bouncePuffMesh.scale.set(1, 1, 1);
+    this.bouncePuffMesh.material.opacity = 0.75;
+    this.bouncePuffMesh.visible = true;
+    this.bouncePuffTimer = 0.18;
   }
 
   // Bat strikes the ball with responsive physics
   applyBatHit({ shotData, timingQuality, customAngle = null }) {
     if (this.hasHitBat) return; // Strictly register once per delivery
+    if (timingQuality === 'MISSED') return; // Strictly ignore missed shots
     this.hasHitBat = true;
 
     // Contact visual effect & sound
-    this.showImpactEffect(this.position);
+    this.showImpactEffect(this.position, timingQuality);
+
+    // Boost post-contact trail visibility for boundary / outfield tracing
+    if (this.trailLine) {
+      if (timingQuality === 'PERFECT' || timingQuality === 'GOOD') {
+        this.trailLine.material.color.setHex(0xffffff);
+        this.trailLine.material.opacity = 0.75;
+      } else {
+        this.trailLine.material.color.setHex(0xb0bec5);
+        this.trailLine.material.opacity = 0.40;
+      }
+    }
 
     // Base exit speed from chosen shot
     let baseSpeed = shotData.exitSpeed || 28.0;
@@ -288,7 +422,7 @@ export class BallPhysics {
       isSweet = false;
     }
 
-    soundManager.playBatHit(timingMultiplier, isSweet);
+    soundManager.playBatHit(timingMultiplier, isSweet, timingQuality);
 
     // Incoming ball velocity rebound bonus (fast deliveries rebound faster)
     const incomingRebound = Math.abs(this.velocity.z) * 0.12;
@@ -322,6 +456,41 @@ export class BallPhysics {
       }
     }
 
+    // Update sparks
+    if (this.sparkTimer > 0) {
+      this.sparkTimer -= delta;
+      const posAttr = this.sparkMesh?.geometry?.attributes?.position;
+      if (posAttr) {
+        const arr = posAttr.array;
+        for (let i = 0; i < 12; i++) {
+          const idx = i * 3;
+          arr[idx] += this.sparkVelocities[idx] * delta;
+          arr[idx + 1] += (this.sparkVelocities[idx + 1] - 9.8 * delta) * delta;
+          arr[idx + 2] += this.sparkVelocities[idx + 2] * delta;
+        }
+        posAttr.needsUpdate = true;
+      }
+      if (this.sparkMesh) {
+        this.sparkMesh.material.opacity = Math.max(0, this.sparkTimer / 0.18);
+        if (this.sparkTimer <= 0) {
+          this.sparkMesh.visible = false;
+        }
+      }
+    }
+
+    // Update pitch bounce puff fade
+    if (this.bouncePuffTimer > 0) {
+      this.bouncePuffTimer -= delta;
+      if (this.bouncePuffMesh) {
+        this.bouncePuffMesh.material.opacity = Math.max(0, (this.bouncePuffTimer / 0.18) * 0.75);
+        this.bouncePuffMesh.scale.addScalar(delta * 2.8);
+        if (this.bouncePuffTimer <= 0) {
+          this.bouncePuffMesh.visible = false;
+          this.bouncePuffMesh.scale.set(1, 1, 1);
+        }
+      }
+    }
+
     if (!this.inPlay) return;
 
     const gravity = -9.8;
@@ -337,8 +506,21 @@ export class BallPhysics {
     this.mesh.position.copy(this.position);
 
     // Ball visual spin
-    this.mesh.rotation.x += this.velocity.z * delta * 2.6;
-    this.mesh.rotation.y += this.velocity.x * delta * 2.6;
+    if (!this.hasHitBat) {
+      if (this.bowlerProfileId === 'SPIN_BOWLER') {
+        this.mesh.rotation.x += this.velocity.z * delta * 4.2;
+        this.mesh.rotation.y += (this.swingAmount >= 0 ? 1 : -1) * delta * 8.5;
+        this.mesh.rotation.z += delta * 5.2;
+      } else if (this.bowlerProfileId === 'SWING_BOWLER') {
+        this.mesh.rotation.x += this.velocity.z * delta * 3.6;
+        this.mesh.rotation.y += (this.swingAmount >= 0 ? 1 : -1) * delta * 1.8;
+      } else {
+        this.mesh.rotation.x += this.velocity.z * delta * 4.4;
+      }
+    } else {
+      this.mesh.rotation.x += this.velocity.z * delta * 3.5;
+      this.mesh.rotation.y += this.velocity.x * delta * 3.5;
+    }
 
     this.updateTrail();
 
@@ -350,7 +532,9 @@ export class BallPhysics {
 
       if (!this.hasBounced && !this.hasHitBat) {
         this.hasBounced = true;
-        soundManager.playPitchBounce(0.8);
+        this.bounceMarker.visible = false;
+        this.showBouncePuff(this.position);
+        soundManager.playPitchBounce(0.85);
       } else {
         soundManager.playPitchBounce(0.35);
       }

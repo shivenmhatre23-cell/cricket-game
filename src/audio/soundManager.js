@@ -58,44 +58,67 @@ class SoundManager {
     }
   }
 
-  // Realistic wooden bat impact
-  playBatHit(power = 1.0, isSweet = true) {
-    if (!this.ctx) return;
+  // Realistic wooden bat impact with edge tick differentiation
+  playBatHit(power = 1.0, isSweet = true, timingQuality = 'GOOD') {
+    if (!this.ctx || timingQuality === 'MISSED') return;
     this.resume();
 
     const t = this.ctx.currentTime;
-    
+    const isEdge = timingQuality === 'EARLY' || timingQuality === 'LATE';
+
+    if (isEdge) {
+      // Thin, high-frequency edge "snick" / tick
+      const clickOsc = this.ctx.createOscillator();
+      const clickGain = this.ctx.createGain();
+      clickOsc.type = 'triangle';
+      clickOsc.frequency.setValueAtTime(1750, t);
+      clickOsc.frequency.exponentialRampToValueAtTime(550, t + 0.035);
+      clickGain.gain.setValueAtTime(0.55 * power, t);
+      clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+      clickOsc.connect(clickGain);
+      clickGain.connect(this.ctx.destination);
+      clickOsc.start(t);
+      clickOsc.stop(t + 0.05);
+
+      // Light edge wood friction transient
+      this.playNoiseBurst(0.035, 0.25 * power, 1200, 3200);
+      return;
+    }
+
     // 1. Initial sharp wooden 'crack' / transient
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     
     osc.type = isSweet ? 'triangle' : 'square';
-    osc.frequency.setValueAtTime(isSweet ? 480 : 320, t);
-    osc.frequency.exponentialRampToValueAtTime(80, t + 0.08);
+    const startFreq = isSweet ? 520 : 340;
+    osc.frequency.setValueAtTime(startFreq, t);
+    osc.frequency.exponentialRampToValueAtTime(75, t + 0.09);
     
-    gain.gain.setValueAtTime(0.8 * power, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + (isSweet ? 0.12 : 0.09));
+    const hitVolume = isSweet ? 0.9 * power : 0.7 * power;
+    gain.gain.setValueAtTime(hitVolume, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + (isSweet ? 0.14 : 0.09));
     
     osc.connect(gain);
     gain.connect(this.ctx.destination);
     osc.start(t);
-    osc.stop(t + 0.15);
+    osc.stop(t + 0.16);
 
     // 2. High-frequency click snap
     const clickOsc = this.ctx.createOscillator();
     const clickGain = this.ctx.createGain();
     clickOsc.type = 'sine';
-    clickOsc.frequency.setValueAtTime(1400, t);
-    clickOsc.frequency.exponentialRampToValueAtTime(200, t + 0.025);
-    clickGain.gain.setValueAtTime(0.6 * power, t);
-    clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+    clickOsc.frequency.setValueAtTime(isSweet ? 1600 : 1200, t);
+    clickOsc.frequency.exponentialRampToValueAtTime(180, t + 0.03);
+    clickGain.gain.setValueAtTime(0.65 * power, t);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
     clickOsc.connect(clickGain);
     clickGain.connect(this.ctx.destination);
     clickOsc.start(t);
     clickOsc.stop(t + 0.04);
 
     // 3. Wooden body resonance noise burst
-    this.playNoiseBurst(0.06, 0.4 * power, 800, 1800);
+    const noiseDuration = isSweet ? 0.08 : 0.05;
+    this.playNoiseBurst(noiseDuration, 0.45 * power, 700, 2000);
   }
 
   // Pitch bounce thump

@@ -411,6 +411,13 @@ class CricketGame {
         timingQuality
       });
 
+      // Subtle camera micro-trauma on crisp impact
+      if (timingQuality === 'PERFECT') {
+        this.cameraManager.applyImpactShake(0.065, 0.12);
+      } else if (timingQuality === 'GOOD' || this.currentShotData.id === 'LOFTED_ATTACK') {
+        this.cameraManager.applyImpactShake(0.035, 0.09);
+      }
+
       // Alert Fielding AI of struck shot
       this.fieldingAI.onShotStruck(
         this.ballPhysics.position,
