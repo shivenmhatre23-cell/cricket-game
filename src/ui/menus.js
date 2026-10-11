@@ -531,7 +531,7 @@ export class MenuManager {
     this.overlay.innerHTML = `
       <div class="menu-card toss-card">
         <h2>🪙 MATCH TOSS CEREMONY</h2>
-        <p class="toss-intro">${this.gameState.battingTeam.name} vs ${this.gameState.bowlingTeam.name}</p>
+        <p class="toss-intro">${TEAMS[this.gameState.userTeamIndex].name} vs ${TEAMS[this.gameState.opponentTeamIndex].name}</p>
 
         <div class="coin-stage">
           <div class="coin-disc" id="coin-disc">🪙</div>
@@ -570,10 +570,20 @@ export class MenuManager {
           const won = Math.random() > 0.4;
           resultPanel.classList.remove('hidden');
 
+          const userTeamName = TEAMS[this.gameState.userTeamIndex].name;
+          const oppTeamName = TEAMS[this.gameState.opponentTeamIndex].name;
+
           if (won) {
-            document.getElementById('toss-result-text').textContent = `🎉 ${this.gameState.battingTeam.name} WON THE TOSS!`;
+            document.getElementById('toss-result-text').textContent = `🎉 ${userTeamName} WON THE TOSS!`;
           } else {
-            document.getElementById('toss-result-text').textContent = `Opponent won the toss and elected to BOWL!`;
+            const oppElectedToBowl = Math.random() > 0.5;
+            if (oppElectedToBowl) {
+              document.getElementById('toss-result-text').textContent = `${oppTeamName} won the toss and elected to BOWL!`;
+              this.gameState.applyTossDecision(true); // User bats first
+            } else {
+              document.getElementById('toss-result-text').textContent = `${oppTeamName} won the toss and elected to BAT!`;
+              this.gameState.applyTossDecision(false); // Opponent bats first
+            }
             setTimeout(() => {
               this.hideModal();
               this.onStartGame();
@@ -587,9 +597,7 @@ export class MenuManager {
       btn.addEventListener('click', () => {
         soundManager.playClick();
         const decision = btn.dataset.dec;
-        if (decision === 'BOWL') {
-          this.gameState.swapBattingSides();
-        }
+        this.gameState.applyTossDecision(decision === 'BAT');
         this.hideModal();
         this.onStartGame();
       });
@@ -699,9 +707,9 @@ export class MenuManager {
         </div>
 
         <div class="summary-actions">
-          <button id="btn-rematch" class="btn-primary-large">
-            ${wasTournament ? 'TOURNAMENT STANDINGS 🏆' : 'PLAY AGAIN 🔄'}
-          </button>
+          ${wasTournament
+            ? '<button id="btn-tourn-standings" class="btn-primary-large">TOURNAMENT STANDINGS 🏆</button>'
+            : '<button id="btn-rematch" class="btn-primary-large">PLAY AGAIN 🔄</button>'}
           <button id="btn-menu-back" class="btn-secondary">MAIN MENU 🏠</button>
         </div>
       </div>
@@ -727,15 +735,23 @@ export class MenuManager {
       });
     }
 
-    document.getElementById('btn-rematch').addEventListener('click', () => {
-      soundManager.playClick();
-      this.hideModal();
-      if (wasTournament) {
+    const tournBtn = document.getElementById('btn-tourn-standings');
+    if (tournBtn) {
+      tournBtn.addEventListener('click', () => {
+        soundManager.playClick();
+        this.hideModal();
         this.showTournamentModal();
-      } else if (this.onRestart) {
-        this.onRestart();
-      }
-    });
+      });
+    }
+
+    const rematchBtn = document.getElementById('btn-rematch');
+    if (rematchBtn) {
+      rematchBtn.addEventListener('click', () => {
+        soundManager.playClick();
+        this.hideModal();
+        if (this.onRestart) this.onRestart();
+      });
+    }
 
     document.getElementById('btn-menu-back').addEventListener('click', () => {
       soundManager.playClick();

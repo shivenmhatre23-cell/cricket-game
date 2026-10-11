@@ -197,11 +197,23 @@ export class GameState {
     this.rulesEngine.initRosters();
   }
 
+  applyTossDecision(userBatsFirst = true) {
+    const battingTeamIdx = userBatsFirst ? this.userTeamIndex : this.opponentTeamIndex;
+    const bowlingTeamIdx = userBatsFirst ? this.opponentTeamIndex : this.userTeamIndex;
+
+    const team1 = TEAMS[battingTeamIdx];
+    const team2 = TEAMS[bowlingTeamIdx];
+
+    this.rulesEngine = new CricketRulesEngine({
+      totalOvers: this.totalOvers,
+      team1,
+      team2
+    });
+  }
+
   swapBattingSides() {
-    const temp = this.userTeamIndex;
-    this.userTeamIndex = this.opponentTeamIndex;
-    this.opponentTeamIndex = temp;
-    this.initMatch(this.userTeamIndex, this.opponentTeamIndex, this.totalOvers);
+    const isUserCurrentlyBatting = this.rulesEngine.battingTeam === TEAMS[this.userTeamIndex];
+    this.applyTossDecision(!isUserCurrentlyBatting);
   }
 
   setState(newState) {

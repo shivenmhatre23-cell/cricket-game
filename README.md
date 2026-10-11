@@ -337,5 +337,5 @@ All 8 shots are parameterized with dedicated durations, power multipliers, loft 
 
 The Three.js browser edition remains fully functional:
 - Start development server: `npm run dev`
-- Run web tests: `npm test` (27/27 tests passing across 5 suites)
+- Run web tests: `npm test` (30/30 tests passing across 5 suites)
 - Build production bundle: `npm run build`

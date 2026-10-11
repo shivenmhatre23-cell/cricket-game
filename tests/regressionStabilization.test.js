@@ -1,33 +1,54 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+import * as THREE from 'three';
 import { GameState, TEAMS } from '../src/gameState.js';
 import { TournamentManager } from '../src/tournament/tournamentManager.js';
+import { CharacterManager } from '../src/scene/characters.js';
 
 describe('Phase 11: Repository Stabilization & Regression Test Suite', () => {
-  it('1. GameState.swapBattingSides correctly swaps batting and bowling teams without throwing TypeError', () => {
+  it('1. GameState.applyTossDecision cleanly initializes batting and bowling teams without corrupting userTeamIndex', () => {
     const state = new GameState();
-    // Default: Team 0 (India) batting, Team 1 (Australia) bowling
-    assert.strictEqual(state.battingTeam.name, 'India');
-    assert.strictEqual(state.bowlingTeam.name, 'Australia');
+    state.initMatch(0, 1, 2); // User: India (0), Opponent: Australia (1)
+
     assert.strictEqual(state.userTeamIndex, 0);
     assert.strictEqual(state.opponentTeamIndex, 1);
+    assert.strictEqual(state.battingTeam.name, 'India');
+    assert.strictEqual(state.bowlingTeam.name, 'Australia');
 
-    // Call swapBattingSides
-    assert.doesNotThrow(() => {
-      state.swapBattingSides();
-    });
-
-    // Swapped: Team 1 (Australia) batting, Team 0 (India) bowling
-    assert.strictEqual(state.battingTeam.name, 'Australia');
-    assert.strictEqual(state.bowlingTeam.name, 'India');
-    assert.strictEqual(state.userTeamIndex, 1);
-    assert.strictEqual(state.opponentTeamIndex, 0);
-
-    // Verify rosters and striker are fresh for Australia
+    // Case A: User elects to BOWL first
+    state.applyTossDecision(false);
+    assert.strictEqual(state.userTeamIndex, 0, 'userTeamIndex must remain India (0)');
+    assert.strictEqual(state.opponentTeamIndex, 1, 'opponentTeamIndex must remain Australia (1)');
+    assert.strictEqual(state.battingTeam.name, 'Australia', 'Australia must be batting first');
+    assert.strictEqual(state.bowlingTeam.name, 'India', 'India must be bowling first');
     assert.strictEqual(state.getStriker().name, TEAMS[1].players[0].name);
+
+    // Case B: User elects to BAT first
+    state.applyTossDecision(true);
+    assert.strictEqual(state.userTeamIndex, 0);
+    assert.strictEqual(state.opponentTeamIndex, 1);
+    assert.strictEqual(state.battingTeam.name, 'India', 'India must be batting first');
+    assert.strictEqual(state.bowlingTeam.name, 'Australia', 'Australia must be bowling first');
+    assert.strictEqual(state.getStriker().name, TEAMS[0].players[0].name);
   });
 
-  it('2. Tournament fixture team resolution handles index 0 (India) without falsy index fallback bugs', () => {
+  it('2. GameState.swapBattingSides correctly toggles batting and bowling sides', () => {
+    const state = new GameState();
+    state.initMatch(0, 1, 2);
+
+    assert.strictEqual(state.battingTeam.name, 'India');
+    assert.strictEqual(state.bowlingTeam.name, 'Australia');
+
+    state.swapBattingSides();
+    assert.strictEqual(state.battingTeam.name, 'Australia');
+    assert.strictEqual(state.bowlingTeam.name, 'India');
+
+    state.swapBattingSides();
+    assert.strictEqual(state.battingTeam.name, 'India');
+    assert.strictEqual(state.bowlingTeam.name, 'Australia');
+  });
+
+  it('3. Tournament fixture team resolution handles index 0 (India) without falsy index fallback bugs', () => {
     // When team is India (TEAMS[0]), findIndex returns 0
     const testFixture = { teamA: 'Australia', teamB: 'India' };
 
@@ -43,7 +64,7 @@ describe('Phase 11: Repository Stabilization & Regression Test Suite', () => {
     assert.strictEqual(TEAMS[teamBIdx].name, 'India');
   });
 
-  it('3. Tournament isolation: TournamentManager only advances when recordMatchResult is explicitly called for tournament matches', () => {
+  it('4. Tournament isolation: Exhibition matches do not advance tournament standings', () => {
     const tm = new TournamentManager();
     const initialIndex = tm.currentMatchIndex;
     const initialStandingsPlayed = tm.standings.reduce((sum, s) => sum + s.played, 0);
@@ -57,23 +78,51 @@ describe('Phase 11: Repository Stabilization & Regression Test Suite', () => {
     assert.strictEqual(tm.currentMatchIndex, initialIndex);
     const currentStandingsPlayed = tm.standings.reduce((sum, s) => sum + s.played, 0);
     assert.strictEqual(currentStandingsPlayed, initialStandingsPlayed);
+  });
 
-    // Explicit tournament match recording advances fixture index
+  it('5. Tournament matches record results exactly once per fixture', () => {
+    const tm = new TournamentManager();
+    const fixture = tm.getCurrentFixture();
+    assert.ok(fixture);
+    const initialIndex = tm.currentMatchIndex;
+
+    // Record fixture result
     tm.recordMatchResult({
-      teamA: 'India',
-      teamB: 'Australia',
-      runsA: 15,
-      runsB: 10,
-      winner: 'India'
+      teamA: fixture.teamA,
+      teamB: fixture.teamB,
+      runsA: 20,
+      runsB: 15,
+      winner: fixture.teamA
     });
 
     assert.strictEqual(tm.currentMatchIndex, initialIndex + 1);
-    const indStanding = tm.standings.find(s => s.name === 'India');
-    assert.strictEqual(indStanding.won, 1);
-    assert.strictEqual(indStanding.points, 2);
+    assert.strictEqual(fixture.played, true);
+    assert.strictEqual(fixture.winner, fixture.teamA);
+
+    const winnerRow = tm.standings.find(s => s.name === fixture.teamA);
+    assert.strictEqual(winnerRow.won, 1);
+    assert.strictEqual(winnerRow.points, 2);
+    assert.strictEqual(winnerRow.played, 1);
   });
 
-  it('4. Team color definitions: All teams define valid hex colors for 3D jersey materials', () => {
+  it('6. CharacterManager.setTeamColors updates material colors after initialization', () => {
+    const scene = new THREE.Scene();
+    const charMgr = new CharacterManager(scene);
+
+    assert.ok(charMgr.battingKitMat);
+    assert.ok(charMgr.bowlingKitMat);
+
+    // Apply England red (#c62828) and Australia gold (#fbc02d)
+    charMgr.setTeamColors('#c62828', '#fbc02d');
+
+    const expectedBattingColor = new THREE.Color('#c62828');
+    const expectedBowlingColor = new THREE.Color('#fbc02d');
+
+    assert.strictEqual(charMgr.battingKitMat.color.getHexString(), expectedBattingColor.getHexString());
+    assert.strictEqual(charMgr.bowlingKitMat.color.getHexString(), expectedBowlingColor.getHexString());
+  });
+
+  it('7. Team color definitions: All teams define valid hex colors for 3D jersey materials', () => {
     TEAMS.forEach(team => {
       assert.ok(team.color, `Team ${team.name} must have a color defined`);
       assert.match(
@@ -84,7 +133,7 @@ describe('Phase 11: Repository Stabilization & Regression Test Suite', () => {
     });
   });
 
-  it('5. Batting shot presets: All 6 shot presets define positive exit speeds and valid radian angles', () => {
+  it('8. Batting shot presets: All 6 shot presets define positive exit speeds and valid radian angles', () => {
     const state = new GameState();
     const shotKeys = ['DEFENSIVE', 'STRAIGHT_DRIVE', 'COVER_DRIVE', 'PULL_SHOT', 'CUT_SHOT', 'LOFTED_ATTACK'];
 

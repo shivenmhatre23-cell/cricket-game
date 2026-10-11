@@ -80,6 +80,9 @@ class CricketGame {
     this.setupKeyboardControls();
     window.addEventListener('resize', () => this.onWindowResize());
 
+    // Initialize character kit colors for current teams
+    this.updateTeamColors();
+
     // Show initial main menu
     this.menuManager.showMainMenu();
 
