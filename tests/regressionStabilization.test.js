@@ -146,4 +146,51 @@ describe('Phase 11: Repository Stabilization & Regression Test Suite', () => {
       assert.ok(typeof shot.shotAngle === 'number');
     });
   });
+
+  it('9. GameState.isUserBatting accurately reflects user batting state across toss decisions and innings break', () => {
+    const state = new GameState();
+    state.initMatch(0, 1, 1); // User: India (0), Opponent: Australia (1), 1 Over
+
+    // Toss: User elects to BAT first
+    state.applyTossDecision(true);
+    assert.strictEqual(state.isUserBatting(), true, 'User must be batting in Innings 1 after choosing BAT');
+
+    // Bowl 6 legal deliveries to end innings 1
+    for (let i = 1; i <= 6; i++) {
+      state.recordDelivery({ deliveryId: `inn1_b${i}`, outcome: 'DOT', runs: 0 });
+    }
+
+    assert.strictEqual(state.currentInnings, 2, 'Should advance to 2nd innings');
+    assert.strictEqual(state.isUserBatting(), false, 'User must be bowling in Innings 2 after batting 1st');
+
+    // Reset and test: User elects to BOWL first
+    state.initMatch(0, 1, 1);
+    state.applyTossDecision(false);
+    assert.strictEqual(state.isUserBatting(), false, 'User must be bowling in Innings 1 after choosing BOWL');
+
+    for (let i = 1; i <= 6; i++) {
+      state.recordDelivery({ deliveryId: `inn1_case2_b${i}`, outcome: 'DOT', runs: 0 });
+    }
+
+    assert.strictEqual(state.currentInnings, 2);
+    assert.strictEqual(state.isUserBatting(), true, 'User must be batting in Innings 2 after bowling 1st');
+  });
+
+  it('10. Delivery result processing updates batsman and bowler figures correctly', () => {
+    const state = new GameState();
+    state.initMatch(0, 1, 2);
+    state.applyTossDecision(true);
+
+    const strikerBefore = state.getStriker();
+    const bowlerBefore = state.getCurrentBowler();
+
+    // Strikers hits a boundary FOUR
+    state.recordDelivery({ deliveryId: 'boundary_1', outcome: 'FOUR', runs: 4 });
+
+    assert.strictEqual(strikerBefore.runs, 4);
+    assert.strictEqual(strikerBefore.fours, 1);
+    assert.strictEqual(bowlerBefore.runsConceded, 4);
+    assert.strictEqual(state.runs, 4);
+  });
 });
+

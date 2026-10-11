@@ -126,7 +126,10 @@ class CricketGame {
     this.hud.updateScoreboard();
     this.hud.updateCameraLabel(this.cameraManager.getModeName());
     this.gameState.setState(GAME_STATES.READY);
-    this.hud.setActionCallout('PRESS <kbd>SPACE</kbd> TO BOWL DELIVERY');
+    const callout = this.gameState.isUserBatting()
+      ? 'PRESS <kbd>SPACE</kbd> TO DELIVER / PLAY SHOT'
+      : 'USER BOWLING — PRESS <kbd>SPACE</kbd> TO BOWL DELIVERY';
+    this.hud.setActionCallout(callout);
   }
 
   startPracticeMode() {
@@ -152,7 +155,9 @@ class CricketGame {
     this.gameState.setState(GAME_STATES.READY);
     const msg = this.isPracticeMode
       ? 'PRESS <kbd>SPACE</kbd> TO BOWL OR <kbd>R</kbd> TO RE-BOWL'
-      : 'PRESS <kbd>SPACE</kbd> TO BOWL DELIVERY';
+      : (this.gameState.isUserBatting()
+          ? 'PRESS <kbd>SPACE</kbd> TO DELIVER / PLAY SHOT'
+          : 'USER BOWLING — PRESS <kbd>SPACE</kbd> TO BOWL DELIVERY');
     this.hud.setActionCallout(msg);
   }
 
@@ -162,7 +167,10 @@ class CricketGame {
     this.resetDeliveryState();
     this.hud.updateScoreboard();
     this.gameState.setState(GAME_STATES.READY);
-    this.hud.setActionCallout('PRESS <kbd>SPACE</kbd> TO BOWL DELIVERY');
+    const callout = this.gameState.isUserBatting()
+      ? 'PRESS <kbd>SPACE</kbd> TO DELIVER / PLAY SHOT'
+      : 'USER BOWLING — PRESS <kbd>SPACE</kbd> TO BOWL DELIVERY';
+    this.hud.setActionCallout(callout);
   }
 
   resetDeliveryState() {
@@ -267,17 +275,51 @@ class CricketGame {
     if (s === GAME_STATES.READY) {
       // Start Bowler Run-up
       this.gameState.setState(GAME_STATES.BOWLER_RUNUP);
-      this.hud.setActionCallout('BOWLER RUNNING IN — TIMING ACTIVE: PRESS <kbd>SPACE</kbd> TO STRIKE');
+      const runupMsg = this.gameState.isUserBatting()
+        ? 'BOWLER RUNNING IN — TIMING ACTIVE: PRESS <kbd>SPACE</kbd> TO STRIKE'
+        : 'BOWLING RUN-UP — RELEASING DELIVERY';
+      this.hud.setActionCallout(runupMsg);
     } else if (s === GAME_STATES.DELIVERY) {
-      // Batsman executes shot!
-      this.executeShot();
+      // Batsman executes shot if user is batting or in practice mode
+      if (this.gameState.isUserBatting() || this.isPracticeMode) {
+        this.executeShot();
+      }
     } else if (s === GAME_STATES.RESULT || s === GAME_STATES.OVER_CHANGE) {
       // Advance to next delivery
       this.resetDeliveryState();
       this.gameState.setState(GAME_STATES.READY);
-      this.hud.setActionCallout('PRESS <kbd>SPACE</kbd> TO BOWL DELIVERY');
+      const nextMsg = this.gameState.isUserBatting()
+        ? 'PRESS <kbd>SPACE</kbd> TO DELIVER / PLAY SHOT'
+        : 'USER BOWLING — PRESS <kbd>SPACE</kbd> TO BOWL DELIVERY';
+      this.hud.setActionCallout(nextMsg);
       this.hud.updateScoreboard();
     }
+  }
+
+  // AI-controlled batsman shot execution when user is bowling
+  executeAIBattingShot() {
+    if (this.isSwinging || !this.ballPhysics.inPlay) return;
+
+    // AI selects context-appropriate shot based on delivery length and line
+    const delivery = this.ballPhysics.currentDelivery || {};
+    const length = delivery.length || 'GOOD';
+    const lineX = this.ballPhysics.position.x;
+
+    let chosenShotKey = 'STRAIGHT_DRIVE';
+    if (length === 'SHORT' || length === 'BOUNCER') {
+      chosenShotKey = 'PULL_SHOT';
+    } else if (lineX < -0.2) {
+      chosenShotKey = 'COVER_DRIVE';
+    } else if (lineX > 0.25) {
+      chosenShotKey = 'CUT_SHOT';
+    } else if (length === 'YORKER') {
+      chosenShotKey = 'DEFENSIVE';
+    } else if (Math.random() < 0.25) {
+      chosenShotKey = 'LOFTED_ATTACK';
+    }
+
+    this.gameState.setSelectedShot(chosenShotKey);
+    this.executeShot();
   }
 
   // Precise timing window & bat collision evaluation
@@ -407,6 +449,10 @@ class CricketGame {
           this.resetDeliveryState();
           this.gameState.setState(GAME_STATES.READY);
           this.hud.updateScoreboard();
+          const nextCallout = this.gameState.isUserBatting()
+            ? 'INNINGS 2: CHASE BEGINS — PRESS <kbd>SPACE</kbd> TO DELIVER / PLAY SHOT'
+            : 'INNINGS 2: DEFEND TARGET — PRESS <kbd>SPACE</kbd> TO BOWL DELIVERY';
+          this.hud.setActionCallout(nextCallout);
         });
       }, 1500);
     }
@@ -523,10 +569,19 @@ class CricketGame {
         }
       }
 
-      // 3. Timing needle animation during delivery approach
+      // 3. Timing needle animation during delivery approach & AI batsman swing
       if (this.gameState.currentState === GAME_STATES.DELIVERY && this.ballPhysics.inPlay) {
         const progress = (this.ballPhysics.position.z + 10.0) / 19.15;
         this.hud.updateTimingMeter(progress);
+
+        // Computer batsman autonomously swings when user is bowling
+        if (!this.gameState.isUserBatting() && !this.isPracticeMode && !this.isSwinging) {
+          const ballZ = this.ballPhysics.position.z;
+          // Strike plane is at Z = 8.95m; AI swings within realistic contact window
+          if (ballZ >= 8.5 && ballZ <= 9.2) {
+            this.executeAIBattingShot();
+          }
+        }
       }
 
       // 4. Ball physics, collisions & boundary checks

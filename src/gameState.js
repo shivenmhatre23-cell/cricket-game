@@ -216,6 +216,10 @@ export class GameState {
     this.applyTossDecision(!isUserCurrentlyBatting);
   }
 
+  isUserBatting() {
+    return this.rulesEngine.battingTeam?.name === TEAMS[this.userTeamIndex]?.name;
+  }
+
   setState(newState) {
     this.previousState = this.currentState;
     this.currentState = newState;
