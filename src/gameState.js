@@ -197,6 +197,13 @@ export class GameState {
     this.rulesEngine.initRosters();
   }
 
+  swapBattingSides() {
+    const temp = this.userTeamIndex;
+    this.userTeamIndex = this.opponentTeamIndex;
+    this.opponentTeamIndex = temp;
+    this.initMatch(this.userTeamIndex, this.opponentTeamIndex, this.totalOvers);
+  }
+
   setState(newState) {
     this.previousState = this.currentState;
     this.currentState = newState;

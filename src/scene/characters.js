@@ -562,4 +562,14 @@ export class CharacterManager {
       });
     });
   }
+
+  setTeamColors(battingColor, bowlingColor) {
+    if (battingColor && this.battingKitMat) {
+      this.battingKitMat.color.set(battingColor);
+    }
+    if (bowlingColor && this.bowlingKitMat) {
+      this.bowlingKitMat.color.set(bowlingColor);
+    }
+  }
 }
+

@@ -22,6 +22,7 @@ export class MenuManager {
 
     this.onSettingsChange = null;
     this.onStartPractice = null;
+    this.isTournamentMatch = false;
   }
 
   // --- 1. MAIN MENU HUB ---
@@ -239,6 +240,7 @@ export class MenuManager {
 
     document.getElementById('btn-proceed-toss').addEventListener('click', () => {
       soundManager.playClick();
+      this.isTournamentMatch = false;
       this.gameState.initMatch(userTeam, oppTeam, overs);
       this.gameState.difficulty = diff;
       this.settings.isNightMode = isNight;
@@ -325,9 +327,12 @@ export class MenuManager {
     if (playBtn && fix) {
       playBtn.addEventListener('click', () => {
         soundManager.playClick();
-        const teamAIdx = TEAMS.findIndex(t => t.name === fix.teamA) || 0;
-        const teamBIdx = TEAMS.findIndex(t => t.name === fix.teamB) || 1;
-        this.gameState.initMatch(Math.max(0, teamAIdx), Math.max(0, teamBIdx), 2);
+        const foundA = TEAMS.findIndex(t => t.name === fix.teamA);
+        const teamAIdx = foundA >= 0 ? foundA : 0;
+        const foundB = TEAMS.findIndex(t => t.name === fix.teamB);
+        const teamBIdx = foundB >= 0 ? foundB : 1;
+        this.gameState.initMatch(teamAIdx, teamBIdx, 2);
+        this.isTournamentMatch = true;
         this.showTossCeremony();
       });
     }
@@ -583,10 +588,7 @@ export class MenuManager {
         soundManager.playClick();
         const decision = btn.dataset.dec;
         if (decision === 'BOWL') {
-          const temp = this.gameState.battingTeam;
-          this.gameState.battingTeam = this.gameState.bowlingTeam;
-          this.gameState.bowlingTeam = temp;
-          this.gameState.resetInnings();
+          this.gameState.swapBattingSides();
         }
         this.hideModal();
         this.onStartGame();
@@ -669,7 +671,8 @@ export class MenuManager {
     const inn2 = matchData.innings2;
 
     // Record result into tournament if active
-    if (this.tournamentManager) {
+    const wasTournament = this.isTournamentMatch;
+    if (wasTournament && this.tournamentManager) {
       this.tournamentManager.recordMatchResult({
         teamA: inn1 ? inn1.teamName : 'Team A',
         teamB: inn2 ? inn2.teamName : 'Team B',
@@ -677,6 +680,7 @@ export class MenuManager {
         runsB: inn2 ? inn2.runs : 0,
         winner
       });
+      this.isTournamentMatch = false;
     }
 
     this.overlay.innerHTML = `
@@ -695,7 +699,9 @@ export class MenuManager {
         </div>
 
         <div class="summary-actions">
-          <button id="btn-rematch" class="btn-primary-large">PLAY AGAIN 🔄</button>
+          <button id="btn-rematch" class="btn-primary-large">
+            ${wasTournament ? 'TOURNAMENT STANDINGS 🏆' : 'PLAY AGAIN 🔄'}
+          </button>
           <button id="btn-menu-back" class="btn-secondary">MAIN MENU 🏠</button>
         </div>
       </div>
@@ -724,7 +730,11 @@ export class MenuManager {
     document.getElementById('btn-rematch').addEventListener('click', () => {
       soundManager.playClick();
       this.hideModal();
-      if (this.onRestart) this.onRestart();
+      if (wasTournament) {
+        this.showTournamentModal();
+      } else if (this.onRestart) {
+        this.onRestart();
+      }
     });
 
     document.getElementById('btn-menu-back').addEventListener('click', () => {

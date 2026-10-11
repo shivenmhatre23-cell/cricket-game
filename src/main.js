@@ -108,10 +108,17 @@ class CricketGame {
     this.scene.add(this.sunLight);
   }
 
+  updateTeamColors() {
+    const battingColor = this.gameState.battingTeam?.color || '#1565c0';
+    const bowlingColor = this.gameState.bowlingTeam?.color || '#2e7d32';
+    this.characters.setTeamColors(battingColor, bowlingColor);
+  }
+
   startNewMatch() {
     soundManager.init();
     this.isPracticeMode = false;
     this.hud.setPracticeMode(false);
+    this.updateTeamColors();
     this.resetDeliveryState();
     this.hud.updateScoreboard();
     this.hud.updateCameraLabel(this.cameraManager.getModeName());
@@ -130,6 +137,7 @@ class CricketGame {
     };
     this.hud.setPracticeMode(true);
     this.hud.updatePracticeStats(this.practiceStats);
+    this.updateTeamColors();
     this.resetDeliveryState();
     this.hud.updateCameraLabel(this.cameraManager.getModeName());
     this.gameState.setState(GAME_STATES.READY);
@@ -147,6 +155,7 @@ class CricketGame {
 
   restartMatch() {
     this.gameState.resetInnings();
+    this.updateTeamColors();
     this.resetDeliveryState();
     this.hud.updateScoreboard();
     this.gameState.setState(GAME_STATES.READY);
@@ -391,6 +400,7 @@ class CricketGame {
     } else if (outcome.inningsBreak) {
       setTimeout(() => {
         this.menuManager.showInningsBreak(outcome.target, () => {
+          this.updateTeamColors();
           this.resetDeliveryState();
           this.gameState.setState(GAME_STATES.READY);
           this.hud.updateScoreboard();
