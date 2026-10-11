@@ -75,6 +75,7 @@ class CricketGame {
     this.swingProgress = 0;
     this.isSwinging = false;
     this.hasAttemptedShot = false;
+    this.hasDeliveredBall = false;
     this.lastTimingQuality = null;
     this.currentShotData = this.gameState.getSelectedShot();
 
@@ -180,22 +181,29 @@ class CricketGame {
     this.swingProgress = 0;
     this.isSwinging = false;
     this.hasAttemptedShot = false;
+    this.hasDeliveredBall = false;
     this.lastTimingQuality = null;
     this.characters.resetBatter();
     this.characters.strikerStumps.reset();
 
-    // Reset Bowler to start of run-up at Z = -24m
-    this.characters.bowler.group.position.set(0.8, 0, -24.0);
+    // Generate new tactical delivery data with BowlingAI
+    const deliveryData = this.gameState.generateDelivery();
+    const profileId = deliveryData.profileId || 'FAST_BOWLER';
+    this.ballPhysics.setupDelivery(deliveryData);
+
+    // Reset Bowler to start of run-up for profile
+    const startZ = this.characters.getBowlerStartZ(profileId);
+    this.characters.bowler.group.position.set(0.8, 0, startZ);
     this.characters.bowler.group.rotation.y = 0;
     this.characters.setBowlerReadyStance();
+
+    // Reset ball into bowler's bowling hand
+    const handPos = this.characters.getBowlerHandPosition();
+    this.ballPhysics.resetToBowlerHand(handPos);
 
     // Reset Fielders to current preset positions
     this.fieldingAI.setPreset(this.fieldingAI.currentPreset, this.characters.fielders);
 
-    // Generate new tactical delivery data with BowlingAI
-    const deliveryData = this.gameState.generateDelivery();
-    this.ballPhysics.setupDelivery(deliveryData);
-    this.ballPhysics.resetToBowlerHand();
     this.hud.updateDeliveryHUD(deliveryData);
 
     // Smooth camera reset
@@ -309,6 +317,9 @@ class CricketGame {
         ? 'BOWLER RUNNING IN — TIMING ACTIVE: PRESS <kbd>SPACE</kbd> TO STRIKE'
         : 'BOWLING RUN-UP — RELEASING DELIVERY';
       this.hud.setActionCallout(runupMsg);
+    } else if (s === GAME_STATES.BOWLER_RUNUP) {
+      // Repeated Space presses during run-up must not duplicate release or alter state
+      return;
     } else if (s === GAME_STATES.DELIVERY) {
       // Batsman executes shot if user is batting or in practice mode
       if (this.gameState.isUserBatting() || this.isPracticeMode) {
@@ -557,36 +568,33 @@ class CricketGame {
     const delta = Math.min(this.clock.getDelta(), 0.08);
 
     if (this.gameState.currentState !== GAME_STATES.PAUSED) {
-      // 1. Bowler Run-up & Windmill Action
-      if (this.gameState.currentState === GAME_STATES.BOWLER_RUNUP) {
-        this.runupProgress += delta * 1.6;
-        const bPos = this.characters.bowler.group.position;
-        bPos.z = THREE.MathUtils.lerp(-24.0, -10.06, Math.min(this.runupProgress, 1.0));
+      const profileId = this.gameState.currentDeliveryData?.profileId || 'FAST_BOWLER';
 
-        const bw = this.characters.bowler;
-        const strideCycle = Math.sin(this.runupProgress * Math.PI * 7);
+      // 1. Bowler Run-up, Delivery Stride & Follow-through
+      if (this.gameState.currentState === GAME_STATES.BOWLER_RUNUP ||
+          (this.gameState.currentState === GAME_STATES.DELIVERY && this.runupProgress < 1.0)) {
+        const runupSpeed = this.characters.getBowlerRunupSpeed(profileId);
+        this.runupProgress += delta * runupSpeed;
 
-        if (this.runupProgress < 0.82) {
-          bPos.y = Math.abs(strideCycle) * 0.12;
-          bw.leftLeg.hip.rotation.x = strideCycle * 0.65;
-          bw.leftLeg.knee.rotation.x = Math.max(0, -strideCycle * 0.6);
-          bw.rightLeg.hip.rotation.x = -strideCycle * 0.65;
-          bw.rightLeg.knee.rotation.x = Math.max(0, strideCycle * 0.6);
+        this.characters.playBowlerAction(this.runupProgress, profileId);
 
-          bw.leftArm.shoulder.rotation.x = -strideCycle * 0.7;
-          bw.rightArm.shoulder.rotation.x = strideCycle * 0.7;
-        } else {
-          const gatherProgress = (this.runupProgress - 0.82) / 0.18;
-          bPos.y = Math.sin(gatherProgress * Math.PI) * 0.35;
-          bw.leftArm.shoulder.rotation.x = 1.4 - gatherProgress * 1.2;
-          bw.rightArm.shoulder.rotation.x = -0.5 - gatherProgress * Math.PI * 1.5;
-          bw.leftLeg.hip.rotation.x = 0.4;
-          bw.rightLeg.hip.rotation.x = -0.6;
+        // Before ball release apex (progress < 0.88), ball stays glued to bowler's bowling hand
+        if (!this.hasDeliveredBall) {
+          const handPos = this.characters.getBowlerHandPosition();
+          this.ballPhysics.attachToHand(handPos);
+
+          // Authoritative release event at delivery stride apex (0.88)
+          if (this.runupProgress >= 0.88) {
+            this.hasDeliveredBall = true;
+            this.gameState.setState(GAME_STATES.DELIVERY);
+            const releasePos = this.characters.getBowlerReleasePosition();
+            this.ballPhysics.deliverBall(releasePos);
+          }
         }
 
         if (this.runupProgress >= 1.0) {
-          this.gameState.setState(GAME_STATES.DELIVERY);
-          this.ballPhysics.deliverBall();
+          this.runupProgress = 1.0;
+          this.characters.setBowlerReadyStance();
         }
       }
 

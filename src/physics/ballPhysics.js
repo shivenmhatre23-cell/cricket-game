@@ -122,8 +122,12 @@ export class BallPhysics {
     posAttr.needsUpdate = true;
   }
 
-  resetToBowlerHand() {
-    this.position.set(0.4, 2.1, -10.06);
+  resetToBowlerHand(handPos = null) {
+    if (handPos) {
+      this.position.copy(handPos);
+    } else {
+      this.position.set(0.4, 2.1, -10.06);
+    }
     this.mesh.position.copy(this.position);
     this.velocity.set(0, 0, 0);
     this.inPlay = false;
@@ -139,12 +143,20 @@ export class BallPhysics {
     this.updateTrail();
   }
 
+  // Follow bowler's bowling hand before delivery release
+  attachToHand(pos) {
+    if (this.inPlay || !pos) return;
+    this.position.copy(pos);
+    this.mesh.position.copy(pos);
+  }
+
   // Configure incoming delivery parameters
   setupDelivery(deliveryData) {
     this.currentDeliveryId = deliveryData.deliveryId;
     this.deliverySpeedKmph = deliveryData.speedKmph || 136;
     this.swingAmount = deliveryData.swing || 0;
     this.bowlingType = deliveryData.bowlingType || 'FAST';
+    this.bowlerProfileId = deliveryData.profileId || 'FAST_BOWLER';
     this.lengthType = deliveryData.lengthType || 'GOOD';
 
     // Calculate landing spot on pitch (stumps at Z = 10.06m)
@@ -161,8 +173,26 @@ export class BallPhysics {
   }
 
   // Release ball from bowler's hand towards target
-  deliverBall() {
-    this.resetToBowlerHand();
+  deliverBall(releasePos = null) {
+    // Idempotent delivery release guard
+    if (this.inPlay) return;
+
+    if (releasePos) {
+      this.position.copy(releasePos);
+      this.mesh.position.copy(this.position);
+      this.velocity.set(0, 0, 0);
+      this.hasBounced = false;
+      this.hasHitBat = false;
+      this.hasHitPad = false;
+      this.bounceCount = 0;
+      this.fielderHolding = null;
+      this.isThrowing = false;
+      this.bounceMarker.visible = true;
+      this.updateTrail();
+    } else {
+      this.resetToBowlerHand();
+    }
+
     this.inPlay = true;
     this.isDead = false;
     this.isScored = false;

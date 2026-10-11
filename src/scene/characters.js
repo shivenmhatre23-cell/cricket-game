@@ -438,10 +438,15 @@ export class CharacterManager {
     const bw = this.bowler;
     if (!bw) return;
     this.safePos(bw.hips, 0, 0.95, 0);
+    this.safeRot(bw.hips, 0, 0, 0);
     this.safeRot(bw.leftLeg?.hip, 0, 0, 0);
+    this.safeRot(bw.leftLeg?.knee, 0, 0, 0);
     this.safeRot(bw.rightLeg?.hip, 0, 0, 0);
+    this.safeRot(bw.rightLeg?.knee, 0, 0, 0);
     this.safeRot(bw.leftArm?.shoulder, 0.2, 0, 0);
+    this.safeRot(bw.leftArm?.elbow, -0.3, 0, 0);
     this.safeRot(bw.rightArm?.shoulder, 0.2, 0, 0);
+    this.safeRot(bw.rightArm?.elbow, -0.3, 0, 0);
   }
 
   setKeeperStance() {
@@ -582,6 +587,151 @@ export class CharacterManager {
 
   resetBatter() {
     this.setBatsmanStance();
+  }
+
+  // --- 6. Dynamic Bowling Delivery Animation for 4 Distinct Bowling Styles ---
+  getBowlerStartZ(profileId = 'FAST_BOWLER') {
+    if (profileId === 'SPIN_BOWLER') return -16.0;
+    if (profileId === 'DEFENSIVE_BOWLER') return -20.0;
+    if (profileId === 'SWING_BOWLER') return -22.0;
+    return -24.0;
+  }
+
+  getBowlerRunupSpeed(profileId = 'FAST_BOWLER') {
+    if (profileId === 'SPIN_BOWLER') return 1.35;
+    if (profileId === 'SWING_BOWLER') return 1.50;
+    if (profileId === 'DEFENSIVE_BOWLER') return 1.45;
+    return 1.65;
+  }
+
+  getBowlerHandPosition() {
+    if (!this.bowler || !this.bowler.rightArm || !this.bowler.rightArm.glove) {
+      return new THREE.Vector3(0.4, 2.1, -10.06);
+    }
+    const pos = new THREE.Vector3();
+    if (this.bowler.group && typeof this.bowler.group.updateMatrixWorld === 'function') {
+      this.bowler.group.updateMatrixWorld(true);
+    }
+    this.bowler.rightArm.glove.getWorldPosition(pos);
+    return pos;
+  }
+
+  getBowlerReleasePosition() {
+    return this.getBowlerHandPosition();
+  }
+
+  playBowlerAction(progress, profileId = 'FAST_BOWLER') {
+    const bw = this.bowler;
+    if (!bw || !bw.group) return;
+
+    const p = Math.max(0, Math.min(1.0, progress));
+    const startZ = this.getBowlerStartZ(profileId);
+    const creaseZ = -10.06;
+
+    if (p <= 0) {
+      bw.group.position.set(0.8, 0, startZ);
+      this.setBowlerReadyStance();
+      return;
+    }
+
+    if (p >= 1.0) {
+      bw.group.position.set(0.8, 0, -9.5);
+      this.setBowlerReadyStance();
+      return;
+    }
+
+    const bPos = bw.group.position;
+    const isSpin = profileId === 'SPIN_BOWLER';
+    const isSwing = profileId === 'SWING_BOWLER';
+
+    if (p < 0.70) {
+      // Phase 1: Approach Run-up
+      const runNorm = p / 0.70;
+      bPos.z = THREE.MathUtils.lerp(startZ, -12.5, runNorm);
+
+      const strideFreq = isSpin ? 4.5 : 6.5;
+      const strideCycle = Math.sin(runNorm * Math.PI * strideFreq);
+      const bobAmount = isSpin ? 0.06 : 0.12;
+      bPos.y = Math.abs(strideCycle) * bobAmount;
+
+      const legAmp = isSpin ? 0.45 : 0.65;
+      this.safeRot(bw.leftLeg?.hip, strideCycle * legAmp, 0, 0);
+      this.safeRot(bw.leftLeg?.knee, Math.max(0, -strideCycle * legAmp * 0.9), 0, 0);
+      this.safeRot(bw.rightLeg?.hip, -strideCycle * legAmp, 0, 0);
+      this.safeRot(bw.rightLeg?.knee, Math.max(0, strideCycle * legAmp * 0.9), 0, 0);
+
+      const armAmp = isSpin ? 0.4 : 0.65;
+      this.safeRot(bw.leftArm?.shoulder, -strideCycle * armAmp, 0, 0.2);
+      this.safeRot(bw.rightArm?.shoulder, strideCycle * armAmp, 0, -0.2);
+      this.safeRot(bw.leftArm?.elbow, -0.5, 0, 0);
+      this.safeRot(bw.rightArm?.elbow, -0.5, 0, 0);
+      this.safeRot(bw.hips, 0, isSpin ? strideCycle * 0.08 : 0, 0);
+    } else if (p < 0.88) {
+      // Phase 2: Gather & Bound into Delivery Stride
+      const t = (p - 0.70) / 0.18;
+      bPos.z = THREE.MathUtils.lerp(-12.5, creaseZ, t);
+
+      const leapHeight = isSpin ? 0.18 : (isSwing ? 0.28 : 0.35);
+      bPos.y = Math.sin(t * Math.PI) * leapHeight;
+
+      // Front Arm: reaches high to sight target
+      this.safeRot(bw.leftArm?.shoulder, 0.4 + t * 1.35, 0, 0.15);
+      this.safeRot(bw.leftArm?.elbow, -0.3 * (1 - t), 0, 0);
+
+      // Bowling Arm: circular windmill cocking behind back
+      this.safeRot(bw.rightArm?.shoulder, 0.3 - t * 2.8, 0, -0.15);
+      this.safeRot(bw.rightArm?.elbow, -0.1, 0, 0);
+
+      // Legs in gather
+      this.safeRot(bw.leftLeg?.hip, 0.5 * (1 - t) - 0.2 * t, 0, 0);
+      this.safeRot(bw.leftLeg?.knee, 0.4 * (1 - t), 0, 0);
+      this.safeRot(bw.rightLeg?.hip, -0.4 * (1 - t) + 0.3 * t, 0, 0);
+      this.safeRot(bw.rightLeg?.knee, 0.3 * t, 0, 0);
+
+      // Torso alignment
+      const sideRot = isSwing ? 0.35 : (isSpin ? 0.25 : 0.18);
+      this.safeRot(bw.hips, 0.1 * t, sideRot * Math.sin(t * Math.PI), 0);
+    } else if (p <= 0.92) {
+      // Phase 3: Delivery Stride & Ball Release Point
+      const t = (p - 0.88) / 0.04;
+      bPos.z = creaseZ;
+      bPos.y = Math.max(0, (1 - t) * 0.08);
+
+      // Front arm pulls down vigorously into the ribs
+      this.safeRot(bw.leftArm?.shoulder, 1.75 - t * 2.1, 0, 0.2);
+      this.safeRot(bw.leftArm?.elbow, -0.6 * t, 0, 0);
+
+      // Bowling arm sweeps through high vertical release apex
+      this.safeRot(bw.rightArm?.shoulder, -2.5 - t * 2.2, 0, -0.1);
+      this.safeRot(bw.rightArm?.elbow, -0.05, 0, 0);
+
+      // Planted front leg
+      this.safeRot(bw.leftLeg?.hip, -0.2 - t * 0.15, 0, 0);
+      this.safeRot(bw.leftLeg?.knee, 0.15, 0, 0);
+      this.safeRot(bw.rightLeg?.hip, 0.3 + t * 0.3, 0, 0);
+      this.safeRot(bw.rightLeg?.knee, 0.3 * (1 - t), 0, 0);
+
+      // Torso flexes forward
+      this.safeRot(bw.hips, 0.25 * t, 0, 0);
+    } else {
+      // Phase 4: Follow-Through & Deceleration
+      const t = (p - 0.92) / 0.08;
+      bPos.z = THREE.MathUtils.lerp(creaseZ, -9.5, t);
+      bPos.y = 0;
+
+      // Arm wraps across left hip
+      this.safeRot(bw.rightArm?.shoulder, -4.7 - (1 - t) * 0.6 + t * 4.9, 0, 0.3 * (1 - t));
+      this.safeRot(bw.rightArm?.elbow, -0.4 * (1 - t) - 0.3 * t, 0, 0);
+      this.safeRot(bw.leftArm?.shoulder, -0.35 * (1 - t) + 0.2 * t, 0, 0);
+      this.safeRot(bw.leftArm?.elbow, -0.6 * (1 - t) - 0.3 * t, 0, 0);
+
+      // Rear leg drives through
+      this.safeRot(bw.rightLeg?.hip, 0.6 * (1 - t), 0, 0);
+      this.safeRot(bw.leftLeg?.hip, -0.35 * (1 - t), 0, 0);
+
+      // Torso recovers to upright
+      this.safeRot(bw.hips, 0.25 * (1 - t), 0, 0);
+    }
   }
 
   // Update physical wickets and bails
