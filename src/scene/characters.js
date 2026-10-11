@@ -383,136 +383,191 @@ export class CharacterManager {
     });
   }
 
+  // Safe joint transforms preventing crashes on missing optional bones
+  safeRot(joint, x, y, z) {
+    if (joint && joint.rotation) {
+      if (typeof x === 'number') joint.rotation.x = x;
+      if (typeof y === 'number') joint.rotation.y = y;
+      if (typeof z === 'number') joint.rotation.z = z;
+    }
+  }
+
+  safePos(joint, x, y, z) {
+    if (joint && joint.position) {
+      if (typeof x === 'number') joint.position.x = x;
+      if (typeof y === 'number') joint.position.y = y;
+      if (typeof z === 'number') joint.position.z = z;
+    }
+  }
+
   // --- 4. Authentic Cricket Poses ---
   setBatsmanStance() {
     const b = this.batter;
-    b.hips.position.y = 0.93;
-    b.hips.rotation.set(0, -Math.PI * 0.45, 0);
+    if (!b) return;
 
-    b.leftLeg.hip.rotation.set(-0.15, 0, 0.05);
-    b.leftLeg.knee.rotation.set(0.2, 0, 0);
-    b.rightLeg.hip.rotation.set(0.1, 0, -0.05);
-    b.rightLeg.knee.rotation.set(0.15, 0, 0);
+    this.safePos(b.hips, 0, 0.93, 0);
+    this.safeRot(b.hips, 0, -Math.PI * 0.45, 0);
 
-    b.leftArm.shoulder.rotation.set(0.65, 0, -0.35);
-    b.leftArm.elbow.rotation.set(-0.4, 0, 0);
-    b.rightArm.shoulder.rotation.set(0.8, 0, 0.2);
-    b.rightArm.elbow.rotation.set(-0.3, 0, 0);
+    this.safeRot(b.leftLeg?.hip, -0.15, 0, 0.05);
+    this.safeRot(b.leftLeg?.knee, 0.2, 0, 0);
+    this.safeRot(b.rightLeg?.hip, 0.1, 0, -0.05);
+    this.safeRot(b.rightLeg?.knee, 0.15, 0, 0);
+
+    this.safeRot(b.leftArm?.shoulder, 0.65, 0, -0.35);
+    this.safeRot(b.leftArm?.elbow, -0.4, 0, 0);
+    this.safeRot(b.rightArm?.shoulder, 0.8, 0, 0.2);
+    this.safeRot(b.rightArm?.elbow, -0.3, 0, 0);
 
     if (b.bat) {
-      b.bat.rotation.set(0.35, 0, -0.15);
+      this.safeRot(b.bat, 0.35, 0, -0.15);
     }
   }
 
   setNonStrikerStance() {
     const ns = this.nonStriker;
-    ns.hips.position.y = 0.95;
-    ns.leftArm.shoulder.rotation.set(0.3, 0, 0);
-    ns.rightArm.shoulder.rotation.set(0.4, 0, 0);
+    if (!ns) return;
+    this.safePos(ns.hips, 0, 0.95, 0);
+    this.safeRot(ns.leftArm?.shoulder, 0.3, 0, 0);
+    this.safeRot(ns.rightArm?.shoulder, 0.4, 0, 0);
     if (ns.bat) {
-      ns.bat.rotation.set(0.8, 0, 0);
+      this.safeRot(ns.bat, 0.8, 0, 0);
     }
   }
 
   setBowlerReadyStance() {
     const bw = this.bowler;
-    bw.hips.position.y = 0.95;
-    bw.leftLeg.hip.rotation.set(0, 0, 0);
-    bw.rightLeg.hip.rotation.set(0, 0, 0);
-    bw.leftArm.shoulder.rotation.set(0.2, 0, 0);
-    bw.rightArm.shoulder.rotation.set(0.2, 0, 0);
+    if (!bw) return;
+    this.safePos(bw.hips, 0, 0.95, 0);
+    this.safeRot(bw.leftLeg?.hip, 0, 0, 0);
+    this.safeRot(bw.rightLeg?.hip, 0, 0, 0);
+    this.safeRot(bw.leftArm?.shoulder, 0.2, 0, 0);
+    this.safeRot(bw.rightArm?.shoulder, 0.2, 0, 0);
   }
 
   setKeeperStance() {
     const k = this.keeper;
-    k.hips.position.y = 0.68;
-    k.leftLeg.hip.rotation.set(-0.75, 0, 0.2);
-    k.rightLeg.hip.rotation.set(-0.75, 0, -0.2);
-    k.leftLeg.knee.rotation.set(1.1, 0, 0);
-    k.rightLeg.knee.rotation.set(1.1, 0, 0);
-    k.leftArm.shoulder.rotation.set(0.5, 0, -0.2);
-    k.rightArm.shoulder.rotation.set(0.5, 0, 0.2);
-    k.leftArm.elbow.rotation.set(-0.6, 0, 0);
-    k.rightArm.elbow.rotation.set(-0.6, 0, 0);
+    if (!k) return;
+    this.safePos(k.hips, 0, 0.68, 0);
+    this.safeRot(k.leftLeg?.hip, -0.75, 0, 0.2);
+    this.safeRot(k.rightLeg?.hip, -0.75, 0, -0.2);
+    this.safeRot(k.leftLeg?.knee, 1.1, 0, 0);
+    this.safeRot(k.rightLeg?.knee, 1.1, 0, 0);
+    this.safeRot(k.leftArm?.shoulder, 0.5, 0, -0.2);
+    this.safeRot(k.rightArm?.shoulder, 0.5, 0, 0.2);
+    this.safeRot(k.leftArm?.elbow, -0.6, 0, 0);
+    this.safeRot(k.rightArm?.elbow, -0.6, 0, 0);
   }
 
   setFielderStance(fielder) {
-    fielder.hips.position.y = 0.88;
-    fielder.leftLeg.hip.rotation.set(-0.25, 0, 0.1);
-    fielder.rightLeg.hip.rotation.set(-0.25, 0, -0.1);
-    fielder.leftLeg.knee.rotation.set(0.35, 0, 0);
-    fielder.rightLeg.knee.rotation.set(0.35, 0, 0);
-    fielder.leftArm.shoulder.rotation.set(0.4, 0, -0.1);
-    fielder.rightArm.shoulder.rotation.set(0.4, 0, 0.1);
+    if (!fielder) return;
+    this.safePos(fielder.hips, 0, 0.88, 0);
+    this.safeRot(fielder.leftLeg?.hip, -0.25, 0, 0.1);
+    this.safeRot(fielder.rightLeg?.hip, -0.25, 0, -0.1);
+    this.safeRot(fielder.leftLeg?.knee, 0.35, 0, 0);
+    this.safeRot(fielder.rightLeg?.knee, 0.35, 0, 0);
+    this.safeRot(fielder.leftArm?.shoulder, 0.4, 0, -0.1);
+    this.safeRot(fielder.rightArm?.shoulder, 0.4, 0, 0.1);
   }
 
   // --- 5. Dynamic Bat Swing Animation for 6 Distinct Shots ---
-  playBatSwing(progress, shotKey = 'STRAIGHT_DRIVE', shotAngle = Math.PI) {
+  playBatSwing(progress, shotKey = 'STRAIGHT_DRIVE', shotAngle = Math.PI, timingQuality = null) {
     const b = this.batter;
     if (!b || !b.bat) return;
 
-    const swing = Math.sin(progress * Math.PI);
+    // Normalizing and clamping progress to [0, 1]
+    const p = Math.max(0, Math.min(1, progress));
+    if (p <= 0 || p >= 1) {
+      this.setBatsmanStance();
+      return;
+    }
+
+    const swing = Math.sin(p * Math.PI);
+
+    // Subtle edge / bat angle feedback on mistimed or missed shots
+    let edgeOffset = 0;
+    if (timingQuality === 'EARLY') {
+      edgeOffset = swing * 0.16; // Closed face, leading edge tilt
+    } else if (timingQuality === 'LATE') {
+      edgeOffset = -swing * 0.16; // Open face, outside edge tilt
+    }
 
     switch (shotKey) {
       case 'DEFENSIVE':
         // Compact defensive block: stride forward, soft hands, angled bat down into turf
-        b.hips.position.z = 9.15 - swing * 0.12;
-        b.leftLeg.hip.rotation.x = -0.15 - swing * 0.35; // front foot forward
-        b.rightArm.shoulder.rotation.x = 0.8 - swing * 0.9;
-        b.leftArm.shoulder.rotation.x = 0.65 - swing * 0.8;
-        b.bat.rotation.x = 0.35 - swing * 0.75; // angled downward
-        b.bat.rotation.z = -0.15 + swing * 0.1;
+        this.safePos(b.hips, 0, 0.93, -swing * 0.12);
+        this.safeRot(b.hips, swing * 0.06, -Math.PI * 0.45, 0);
+        this.safeRot(b.leftLeg?.hip, -0.15 - swing * 0.35, 0, 0.05);
+        this.safeRot(b.leftLeg?.knee, 0.2 + swing * 0.25, 0, 0);
+        this.safeRot(b.rightLeg?.hip, 0.1, 0, -0.05);
+        this.safeRot(b.leftArm?.shoulder, 0.65 - swing * 0.9, 0, -0.35 + swing * 0.1);
+        this.safeRot(b.leftArm?.elbow, -0.4 - swing * 0.2, 0, 0);
+        this.safeRot(b.rightArm?.shoulder, 0.8 - swing * 0.85, 0, 0.2);
+        this.safeRot(b.rightArm?.elbow, -0.3 - swing * 0.15, 0, 0);
+        this.safeRot(b.bat, 0.35 - swing * 0.85, 0, -0.15 + swing * 0.08 + edgeOffset);
         break;
 
       case 'STRAIGHT_DRIVE':
-        // Classical straight drive: high front elbow, vertical bat face
-        b.hips.rotation.y = -Math.PI * 0.45 + swing * 0.15;
-        b.leftArm.shoulder.rotation.x = 0.65 - swing * 1.85; // high front elbow
-        b.rightArm.shoulder.rotation.x = 0.8 - swing * 1.95;
-        b.rightArm.elbow.rotation.x = -0.3 - swing * 0.5;
-        b.bat.rotation.x = 0.35 - swing * 2.3;
-        b.bat.rotation.z = -0.15 + swing * 0.1;
+        // Classical straight drive: high front elbow, vertical bat face down the V
+        this.safePos(b.hips, 0, 0.93, -swing * 0.14);
+        this.safeRot(b.hips, 0, -Math.PI * 0.45 + swing * 0.22, 0);
+        this.safeRot(b.leftLeg?.hip, -0.15 - swing * 0.38, 0, 0.05);
+        this.safeRot(b.leftLeg?.knee, 0.2 + swing * 0.3, 0, 0);
+        this.safeRot(b.leftArm?.shoulder, 0.65 - swing * 2.1, 0, -0.35 + swing * 0.15);
+        this.safeRot(b.leftArm?.elbow, -0.4 - swing * 0.45, 0, 0);
+        this.safeRot(b.rightArm?.shoulder, 0.8 - swing * 2.15, 0, 0.2);
+        this.safeRot(b.rightArm?.elbow, -0.3 - swing * 0.45, 0, 0);
+        this.safeRot(b.bat, 0.35 - swing * 2.45, 0, -0.15 + swing * 0.12 + edgeOffset);
         break;
 
       case 'COVER_DRIVE':
-        // Leaning off-drive: hips open to covers, high elbow presentation
-        b.hips.rotation.y = -Math.PI * 0.45 - swing * 0.45;
-        b.leftLeg.hip.rotation.z = swing * 0.25;
-        b.leftArm.shoulder.rotation.x = 0.65 - swing * 1.7;
-        b.rightArm.shoulder.rotation.x = 0.8 - swing * 1.9;
-        b.bat.rotation.x = 0.35 - swing * 2.1;
-        b.bat.rotation.z = -0.15 - swing * 0.55;
+        // Leaning off-drive: hips and torso open to covers, high elbow presentation
+        this.safePos(b.hips, swing * 0.12, 0.93, -swing * 0.1);
+        this.safeRot(b.hips, 0, -Math.PI * 0.45 - swing * 0.55, 0);
+        this.safeRot(b.leftLeg?.hip, -0.15 - swing * 0.32, 0, 0.05 + swing * 0.35);
+        this.safeRot(b.leftLeg?.knee, 0.2 + swing * 0.28, 0, 0);
+        this.safeRot(b.leftArm?.shoulder, 0.65 - swing * 1.9, 0, -0.35 - swing * 0.25);
+        this.safeRot(b.leftArm?.elbow, -0.4 - swing * 0.35, 0, 0);
+        this.safeRot(b.rightArm?.shoulder, 0.8 - swing * 2.05, 0, 0.2 - swing * 0.3);
+        this.safeRot(b.rightArm?.elbow, -0.3 - swing * 0.35, 0, 0);
+        this.safeRot(b.bat, 0.35 - swing * 2.3, 0, -0.15 - swing * 0.65 + edgeOffset);
         break;
 
       case 'PULL_SHOT':
         // Horizontal cross-bat pull: swivel on back foot towards mid-wicket
-        b.hips.rotation.y = -Math.PI * 0.45 + swing * 0.95;
-        b.rightArm.shoulder.rotation.x = 0.8 - swing * 1.2;
-        b.leftArm.shoulder.rotation.x = 0.65 - swing * 1.1;
-        b.rightArm.shoulder.rotation.y = swing * 0.8;
-        b.bat.rotation.x = 0.35 - swing * 1.4;
-        b.bat.rotation.z = -0.15 + swing * 0.9;
+        this.safePos(b.hips, 0, 0.93, swing * 0.14);
+        this.safeRot(b.hips, 0, -Math.PI * 0.45 + swing * 1.15, 0);
+        this.safeRot(b.leftLeg?.hip, -0.15 + swing * 0.12, swing * 0.55, 0.05);
+        this.safeRot(b.rightLeg?.hip, 0.1 + swing * 0.22, 0, -0.05);
+        this.safeRot(b.leftArm?.shoulder, 0.65 - swing * 1.25, swing * 0.75, -0.35);
+        this.safeRot(b.rightArm?.shoulder, 0.8 - swing * 1.35, swing * 0.85, 0.2);
+        this.safeRot(b.rightArm?.elbow, -0.3 - swing * 0.3, 0, 0);
+        this.safeRot(b.bat, 0.35 - swing * 1.5, 0, -0.15 + swing * 1.05 + edgeOffset);
         break;
 
       case 'CUT_SHOT':
-        // Back-foot square cut: high-to-low slashing arc through off-side
-        b.hips.position.z = 9.15 + swing * 0.15; // rock onto back foot
-        b.hips.rotation.y = -Math.PI * 0.45 - swing * 0.35;
-        b.rightArm.shoulder.rotation.x = 0.8 - swing * 1.6;
-        b.leftArm.shoulder.rotation.x = 0.65 - swing * 1.3;
-        b.bat.rotation.x = 0.35 - swing * 1.9;
-        b.bat.rotation.z = -0.15 - swing * 0.8;
+        // Back-foot square cut: rock back & across, high-to-low slashing arc through off-side
+        this.safePos(b.hips, swing * 0.12, 0.93, swing * 0.16);
+        this.safeRot(b.hips, 0, -Math.PI * 0.45 - swing * 0.42, 0);
+        this.safeRot(b.leftLeg?.hip, -0.15 + swing * 0.1, 0, 0.05);
+        this.safeRot(b.rightLeg?.hip, 0.1 + swing * 0.25, 0, -0.05);
+        this.safeRot(b.leftArm?.shoulder, 0.65 - swing * 1.55, -swing * 0.35, -0.35);
+        this.safeRot(b.rightArm?.shoulder, 0.8 - swing * 1.85, -swing * 0.45, 0.2 + swing * 0.2);
+        this.safeRot(b.rightArm?.elbow, -0.3 - swing * 0.35, 0, 0);
+        this.safeRot(b.bat, 0.35 - swing * 2.1, 0, -0.15 - swing * 0.95 + edgeOffset);
         break;
 
       case 'LOFTED_ATTACK':
       default:
-        // High aggressive aerial swing: maximum extension into the sky
-        b.hips.rotation.y = -Math.PI * 0.45 + (shotAngle - Math.PI) * 0.6 * swing;
-        b.rightArm.shoulder.rotation.x = 0.8 - swing * 2.6;
-        b.leftArm.shoulder.rotation.x = 0.65 - swing * 2.4;
-        b.rightArm.elbow.rotation.x = -0.3 - swing * 0.8;
-        b.bat.rotation.x = 0.35 - swing * 3.1; // full follow-through into the air
-        b.bat.rotation.z = -0.15 + swing * 0.4;
+        // High aggressive aerial swing: explosive upward launch into the sky
+        this.safePos(b.hips, 0, 0.93 + swing * 0.06, -swing * 0.08);
+        this.safeRot(b.hips, -swing * 0.18, -Math.PI * 0.45 + (shotAngle - Math.PI) * 0.7 * swing, 0);
+        this.safeRot(b.leftLeg?.hip, -0.15 - swing * 0.35, 0, 0.05);
+        this.safeRot(b.leftLeg?.knee, 0.2 + swing * 0.25, 0, 0);
+        this.safeRot(b.leftArm?.shoulder, 0.65 - swing * 2.7, 0, -0.35 + swing * 0.2);
+        this.safeRot(b.leftArm?.elbow, -0.4 - swing * 0.5, 0, 0);
+        this.safeRot(b.rightArm?.shoulder, 0.8 - swing * 2.9, 0, 0.2 - swing * 0.15);
+        this.safeRot(b.rightArm?.elbow, -0.3 - swing * 0.75, 0, 0);
+        this.safeRot(b.bat, 0.35 - swing * 3.35, 0, -0.15 + swing * 0.45 + edgeOffset);
         break;
     }
   }
@@ -527,9 +582,6 @@ export class CharacterManager {
 
   resetBatter() {
     this.setBatsmanStance();
-    if (this.batter) {
-      this.batter.hips.position.z = 0;
-    }
   }
 
   // Update physical wickets and bails

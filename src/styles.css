@@ -456,6 +456,11 @@ html, body {
   text-shadow: 0 0 12px var(--danger-red);
 }
 
+.meter-feedback.active.type-missed {
+  color: #ff9800;
+  text-shadow: 0 0 12px rgba(255, 152, 0, 0.75);
+}
+
 .timing-bar-track {
   position: relative;
   width: 100%;

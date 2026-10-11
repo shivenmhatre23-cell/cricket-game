@@ -74,6 +74,8 @@ class CricketGame {
     this.runupProgress = 0;
     this.swingProgress = 0;
     this.isSwinging = false;
+    this.hasAttemptedShot = false;
+    this.lastTimingQuality = null;
     this.currentShotData = this.gameState.getSelectedShot();
 
     // Setup input listeners & window resize
@@ -177,6 +179,8 @@ class CricketGame {
     this.runupProgress = 0;
     this.swingProgress = 0;
     this.isSwinging = false;
+    this.hasAttemptedShot = false;
+    this.lastTimingQuality = null;
     this.characters.resetBatter();
     this.characters.strikerStumps.reset();
 
@@ -198,6 +202,18 @@ class CricketGame {
     this.cameraManager.resetToDeliveryStart();
     this.hud.updateCameraLabel(this.cameraManager.getModeName());
     this.hud.updateTimingMeter(0.5);
+  }
+
+  // Unified shot selection path for keyboard hotkeys and HUD button clicks
+  selectBattingShot(shotKey) {
+    if (this.gameState.currentState === GAME_STATES.PAUSED ||
+        this.gameState.currentState === GAME_STATES.MATCH_OVER) {
+      return;
+    }
+    if (BATTING_SHOTS[shotKey]) {
+      this.hud.selectShot(shotKey);
+      soundManager.playClick();
+    }
   }
 
   handleUIAction(action, data) {
@@ -224,12 +240,18 @@ class CricketGame {
       soundManager.playClick();
     } else if (action === 'RE_BOWL') {
       this.rebowlDelivery();
+    } else if (action === 'SELECT_SHOT') {
+      this.selectBattingShot(data);
+    } else if (action === 'TRIGGER_ACTION') {
+      this.handleSpacePress();
     }
   }
 
   setupKeyboardControls() {
     window.addEventListener('keydown', (e) => {
       soundManager.init();
+
+      if (e.repeat) return; // Prevent OS key auto-repeat from triggering multiple actions
 
       if (e.code === 'Space') {
         e.preventDefault();
@@ -263,14 +285,22 @@ class CricketGame {
       };
 
       if (shotKeyMap[e.code]) {
-        this.hud.selectShot(shotKeyMap[e.code]);
-        soundManager.playClick();
+        this.selectBattingShot(shotKeyMap[e.code]);
       }
     });
   }
 
   handleSpacePress() {
     const s = this.gameState.currentState;
+
+    // Respect paused and inactive states
+    if (s === GAME_STATES.PAUSED ||
+        s === GAME_STATES.MATCH_OVER ||
+        s === GAME_STATES.INNINGS_BREAK ||
+        s === GAME_STATES.MENU ||
+        s === GAME_STATES.TOSS) {
+      return;
+    }
 
     if (s === GAME_STATES.READY) {
       // Start Bowler Run-up
@@ -298,7 +328,7 @@ class CricketGame {
 
   // AI-controlled batsman shot execution when user is bowling
   executeAIBattingShot() {
-    if (this.isSwinging || !this.ballPhysics.inPlay) return;
+    if (this.isSwinging || this.hasAttemptedShot || !this.ballPhysics.inPlay) return;
 
     // AI selects context-appropriate shot based on delivery length and line
     const delivery = this.ballPhysics.currentDelivery || {};
@@ -322,10 +352,11 @@ class CricketGame {
     this.executeShot();
   }
 
-  // Precise timing window & bat collision evaluation
+  // Precise timing window & bat collision evaluation (at most once per delivery)
   executeShot() {
-    if (this.isSwinging || !this.ballPhysics.inPlay) return;
+    if (this.isSwinging || this.hasAttemptedShot || !this.ballPhysics.inPlay) return;
 
+    this.hasAttemptedShot = true;
     this.isSwinging = true;
     this.swingProgress = 0;
     this.currentShotData = this.gameState.getSelectedShot();
@@ -357,10 +388,13 @@ class CricketGame {
       feedback = 'MISSED! ❌ (Beaten by Pace)';
     }
 
+    this.lastTimingQuality = timingQuality;
     this.hud.showFeedback(feedback, timingQuality);
 
-    // Apply collision if not a complete miss
-    if (timingQuality !== 'MISSED') {
+    // Apply audio and collision based on result
+    if (timingQuality === 'MISSED') {
+      soundManager.playWhoosh();
+    } else {
       this.ballPhysics.applyBatHit({
         shotData: this.currentShotData,
         timingQuality
@@ -559,13 +593,17 @@ class CricketGame {
       // 2. Bat swing animation for chosen shot
       if (this.isSwinging) {
         this.swingProgress += delta * 3.6;
-        this.characters.playBatSwing(
-          this.swingProgress,
-          this.currentShotData.id,
-          this.currentShotData.shotAngle
-        );
         if (this.swingProgress >= 1.0) {
+          this.swingProgress = 1.0;
           this.isSwinging = false;
+          this.characters.resetBatter();
+        } else {
+          this.characters.playBatSwing(
+            this.swingProgress,
+            this.currentShotData?.id || 'STRAIGHT_DRIVE',
+            this.currentShotData?.shotAngle || Math.PI,
+            this.lastTimingQuality
+          );
         }
       }
 

@@ -166,8 +166,17 @@ export class HUD {
       btn.addEventListener('click', () => {
         const shotKey = btn.dataset.shot;
         this.selectShot(shotKey);
+        if (this.onAction) this.onAction('SELECT_SHOT', shotKey);
       });
     });
+
+    // Delivery Action Callout / Strike button click
+    const calloutEl = document.getElementById('delivery-action-callout');
+    if (calloutEl) {
+      calloutEl.addEventListener('click', () => {
+        if (this.onAction) this.onAction('TRIGGER_ACTION');
+      });
+    }
 
     // Difficulty buttons
     const diffBtns = this.container.querySelectorAll('.diff-btn');
