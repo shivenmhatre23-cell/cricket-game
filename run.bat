@@ -1,0 +1,6 @@
+@echo off
+cd /d "%~dp0"
+echo Starting Cricket Legends 3D (Browser Edition)...
+echo Opening in your browser...
+npm run dev -- --open
+pause

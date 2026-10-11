@@ -1,0 +1,51 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 26
+  productName: Cricket Legends
+  companyName: Antigravity Games
+  defaultCursor: {fileID: 0}
+  cursorHotspot: {x: 0, y: 0}
+  m_SplashScreenBackgroundColor: {r: 0.039, g: 0.067, b: 0.157, a: 1}
+  defaultScreenWidth: 1920
+  defaultScreenHeight: 1080
+  defaultScreenWidthWeb: 1280
+  defaultScreenHeightWeb: 720
+  m_RenderingPath: 1
+  m_MobileRenderingPath: 1
+  activeColorSpace: 1
+  m_ScriptingBackend: 1
+  stripEngineCode: 1
+  bundleVersion: 1.0.0
+  bundleVersionCode: 1
+  applicationIdentifier:
+    Standalone: com.antigravity.cricketlegends
+    Android: com.antigravity.cricketlegends
+    iPhone: com.antigravity.cricketlegends
+  defaultIsFullScreen: 1
+  defaultIsNativeResolution: 1
+  runInBackground: 0
+  captureSingleScreen: 0
+  useFlipModelSwapchain: 1
+  useMacAppStoreValidation: 0
+  macFullscreenMode: 1
+  targetArchitectures: 1
+  accelerometerFrequency: 60
+  actionOnDotNetUnhandledException: 1
+  videoMemoryBudget: 512
+  visualStudioVersion: 0
+  vulkanEnableValidationLayers: 0
+  vulkanEnableSRGB: 1
+  openGLESVersion: 3
+  vulkanNumSwapchainBuffers: 3
+  vulkanEnablePreTransform: 1
+  androidTargetSdkVersion: 34
+  androidMinSdkVersion: 24
+  androidPreferredInstallLocation: 0
+  androidShowActivityIndicatorOnLoading: -1
+  androidUseAPKExpansionFiles: 0
+  androidTargetArchitectures: 3
+  defaultScreenOrientation: 3
+  useAnimatedSplashScreen: 1
