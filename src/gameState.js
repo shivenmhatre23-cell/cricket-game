@@ -191,10 +191,17 @@ export class GameState {
       team1,
       team2
     });
+
+    if (this.bowlingAI && typeof this.bowlingAI.reset === 'function') {
+      this.bowlingAI.reset();
+    }
   }
 
   resetInnings() {
     this.rulesEngine.initRosters();
+    if (this.bowlingAI && typeof this.bowlingAI.reset === 'function') {
+      this.bowlingAI.reset();
+    }
   }
 
   applyTossDecision(userBatsFirst = true) {
@@ -286,9 +293,16 @@ export class GameState {
         runs: this.runs,
         wickets: this.wickets,
         overs: this.overs,
+        ballsInOver: this.ballsInOver,
         totalOvers: this.totalOvers,
         currentInnings: this.currentInnings,
-        target: this.target
+        target: this.target,
+        strikerIndex: this.strikerIndex,
+        strikerRuns: this.getStriker()?.runs || 0,
+        strikerBalls: this.getStriker()?.balls || 0,
+        thisOverBalls: this.thisOverBalls ? [...this.thisOverBalls] : [],
+        requiredRunRate: this.getRequiredRunRate(),
+        currentRunRate: this.getCurrentRunRate()
       }
     });
 
