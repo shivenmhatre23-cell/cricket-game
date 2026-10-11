@@ -110,12 +110,13 @@ export class CharacterManager {
     group.add(bail1, bail2);
     this.scene.add(group);
 
-    return {
+    const wicketSet = {
       group,
       stumps,
       bails: [bail1, bail2],
       isBroken: false,
       breakWickets: (impactDir = new THREE.Vector3(0, 2, 5)) => {
+        wicketSet.isBroken = true;
         [bail1, bail2].forEach((bail, i) => {
           bail.userData.velocity = impactDir.clone().multiplyScalar(1.2 + i * 0.4).add(new THREE.Vector3((i - 0.5) * 2, 2.8, 0));
           bail.userData.rotVel = new THREE.Vector3(Math.random() * 10, Math.random() * 10, Math.random() * 10);
@@ -126,18 +127,22 @@ export class CharacterManager {
         });
       },
       reset: () => {
+        wicketSet.isBroken = false;
         stumps.forEach(stump => {
           stump.position.copy(stump.userData.initialPos);
           stump.rotation.copy(stump.userData.initialRot);
           stump.userData.velocity = null;
+          if (stump.userData.rotVel) stump.userData.rotVel.set(0, 0, 0);
         });
         [bail1, bail2].forEach(bail => {
           bail.position.copy(bail.userData.initialPos);
           bail.rotation.copy(bail.userData.initialRot);
           bail.userData.velocity = null;
+          if (bail.userData.rotVel) bail.userData.rotVel.set(0, 0, 0);
         });
       }
     };
+    return wicketSet;
   }
 
   // --- 2. Fully Articulated Humanoid Player Builder ---
@@ -466,12 +471,67 @@ export class CharacterManager {
   setFielderStance(fielder) {
     if (!fielder) return;
     this.safePos(fielder.hips, 0, 0.88, 0);
+    this.safeRot(fielder.hips, 0, 0, 0);
     this.safeRot(fielder.leftLeg?.hip, -0.25, 0, 0.1);
     this.safeRot(fielder.rightLeg?.hip, -0.25, 0, -0.1);
     this.safeRot(fielder.leftLeg?.knee, 0.35, 0, 0);
     this.safeRot(fielder.rightLeg?.knee, 0.35, 0, 0);
     this.safeRot(fielder.leftArm?.shoulder, 0.4, 0, -0.1);
     this.safeRot(fielder.rightArm?.shoulder, 0.4, 0, 0.1);
+    this.safeRot(fielder.leftArm?.elbow, -0.3, 0, 0);
+    this.safeRot(fielder.rightArm?.elbow, -0.3, 0, 0);
+  }
+
+  // Smooth running stride articulation for chasing fielders
+  animateFielderRun(fielder, delta, sprintSpeed = 7.4) {
+    if (!fielder) return;
+    fielder.runCycle = (fielder.runCycle || 0) + delta * sprintSpeed * 1.8;
+    const stride = Math.sin(fielder.runCycle);
+
+    this.safePos(fielder.hips, 0, 0.88 + Math.abs(stride) * 0.05, 0);
+    this.safeRot(fielder.leftLeg?.hip, stride * 0.65, 0, 0);
+    this.safeRot(fielder.leftLeg?.knee, Math.max(0, -stride * 0.6), 0, 0);
+    this.safeRot(fielder.rightLeg?.hip, -stride * 0.65, 0, 0);
+    this.safeRot(fielder.rightLeg?.knee, Math.max(0, stride * 0.6), 0, 0);
+
+    this.safeRot(fielder.leftArm?.shoulder, -stride * 0.6, 0, 0.1);
+    this.safeRot(fielder.rightArm?.shoulder, stride * 0.6, 0, -0.1);
+    this.safeRot(fielder.leftArm?.elbow, -0.5, 0, 0);
+    this.safeRot(fielder.rightArm?.elbow, -0.5, 0, 0);
+  }
+
+  // Cupped hands catch pose
+  setFielderCatchStance(fielder) {
+    if (!fielder) return;
+    this.safePos(fielder.hips, 0, 0.82, 0);
+    this.safeRot(fielder.hips, 0.15, 0, 0);
+    this.safeRot(fielder.leftLeg?.hip, -0.3, 0, 0.1);
+    this.safeRot(fielder.rightLeg?.hip, -0.3, 0, -0.1);
+    this.safeRot(fielder.leftLeg?.knee, 0.45, 0, 0);
+    this.safeRot(fielder.rightLeg?.knee, 0.45, 0, 0);
+    this.safeRot(fielder.leftArm?.shoulder, 0.7, 0, -0.3);
+    this.safeRot(fielder.rightArm?.shoulder, 0.7, 0, 0.3);
+    this.safeRot(fielder.leftArm?.elbow, -0.8, 0, 0);
+    this.safeRot(fielder.rightArm?.elbow, -0.8, 0, 0);
+  }
+
+  // Wicketkeeper tracks ball approaching and passing striker crease
+  animateKeeper(ballPos, delta) {
+    const k = this.keeper;
+    if (!k) return;
+
+    if (ballPos && ballPos.z > 7.5 && ballPos.z < 13.5) {
+      // Ball approaching or passing keeper: track laterally and rise slightly
+      const targetX = Math.max(-1.2, Math.min(1.2, ballPos.x));
+      k.group.position.x = THREE.MathUtils.lerp(k.group.position.x, targetX * 0.7, Math.min(1.0, delta * 6.0));
+      this.safePos(k.hips, 0, 0.78, 0);
+      this.safeRot(k.leftArm?.shoulder, 0.6, 0, -0.15);
+      this.safeRot(k.rightArm?.shoulder, 0.6, 0, 0.15);
+    } else {
+      // Return smoothly to crouch stance
+      k.group.position.x = THREE.MathUtils.lerp(k.group.position.x, 0, Math.min(1.0, delta * 4.0));
+      this.setKeeperStance();
+    }
   }
 
   // --- 5. Dynamic Bat Swing Animation for 6 Distinct Shots ---
@@ -734,8 +794,12 @@ export class CharacterManager {
     }
   }
 
-  // Update physical wickets and bails
-  update(delta) {
+  // Update characters, wicketkeeper, physical wickets and bails
+  update(delta, ballPos = null) {
+    if (this.keeper && ballPos) {
+      this.animateKeeper(ballPos, delta);
+    }
+
     [this.strikerStumps, this.nonStrikerStumps].forEach(wicketSet => {
       if (!wicketSet) return;
       wicketSet.stumps.forEach(stump => {
@@ -745,9 +809,12 @@ export class CharacterManager {
           if (stump.position.y < 0) {
             stump.position.y = 0;
             stump.userData.velocity.set(0, 0, 0);
+            if (stump.userData.rotVel) stump.userData.rotVel.set(0, 0, 0);
           }
-          stump.rotation.x += stump.userData.rotVel.x * delta;
-          stump.rotation.z += stump.userData.rotVel.z * delta;
+          if (stump.userData.rotVel) {
+            stump.rotation.x += stump.userData.rotVel.x * delta;
+            stump.rotation.z += stump.userData.rotVel.z * delta;
+          }
         }
       });
       wicketSet.bails.forEach(bail => {
@@ -757,9 +824,12 @@ export class CharacterManager {
           if (bail.position.y < 0) {
             bail.position.y = 0;
             bail.userData.velocity.set(0, 0, 0);
+            if (bail.userData.rotVel) bail.userData.rotVel.set(0, 0, 0);
           }
-          bail.rotation.x += bail.userData.rotVel.x * delta;
-          bail.rotation.y += bail.userData.rotVel.y * delta;
+          if (bail.userData.rotVel) {
+            bail.rotation.x += bail.userData.rotVel.x * delta;
+            bail.rotation.y += bail.userData.rotVel.y * delta;
+          }
         }
       });
     });

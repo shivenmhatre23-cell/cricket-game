@@ -599,12 +599,7 @@ export class BallPhysics {
       return;
     }
 
-    // 7. Fielder Interception & Catches
-    if (this.hasHitBat && characters && characters.fielders && !this.fielderHolding && !this.isScored) {
-      this.updateFieldingAI(delta, characters, onResult);
-    }
-
-    // 8. Ball passed keeper without contact (Dot Ball)
+    // 7. Ball passed keeper without contact (Dot Ball)
     if (!this.hasHitBat && this.position.z > 14.2 && !this.isDead && !this.isScored) {
       if (this.hasHitPad) {
         this.finishDelivery({ outcome: 'RUNS', reason: 'Leg-Bye appeal turned down', runs: 0 }, characters, onResult);
@@ -614,58 +609,6 @@ export class BallPhysics {
     } else if (this.hasHitBat && this.velocity.length() < 0.22 && this.position.y <= groundY + 0.05 && !this.isDead && !this.isScored && !this.isThrowing) {
       // Ball rolled to a stop
       this.finishDelivery({ outcome: 'RUNS', reason: 'Dead ball on pitch', runs: 0 }, characters, onResult);
-    }
-  }
-
-  // Fielder AI logic: intercept, catch, or retrieve ball
-  updateFieldingAI(delta, characters, onResult) {
-    let closestFielder = null;
-    let minDist = Infinity;
-
-    characters.fielders.forEach(f => {
-      const d = f.group.position.distanceTo(this.position);
-      if (d < minDist) {
-        minDist = d;
-        closestFielder = f;
-      }
-    });
-
-    if (closestFielder) {
-      const fielderPos = closestFielder.group.position;
-      const targetPos = new THREE.Vector3(this.position.x, 0, this.position.z);
-      const dir = targetPos.clone().sub(fielderPos);
-      const dist = dir.length();
-
-      if (dist > 1.25) {
-        dir.normalize();
-        const sprintSpeed = 7.6;
-        fielderPos.addScaledVector(dir, sprintSpeed * delta);
-        closestFielder.group.lookAt(targetPos);
-      } else {
-        // Fielder reached ball!
-        this.fielderHolding = closestFielder;
-        this.isThrowing = true;
-
-        // Determine if caught on the full before touching ground
-        const isCatch = this.bounceCount === 0 && this.hasHitBat && this.position.y > 0.4;
-        if (isCatch) {
-          soundManager.playCheer(1.0, 3.0);
-          this.finishDelivery({
-            outcome: 'WICKET',
-            reason: `Caught by ${closestFielder.name}! 🧤`,
-            runs: 0
-          }, characters, onResult);
-        } else {
-          // Normal fielding: 1 or 2 runs depending on distance from center
-          const distFromWickets = Math.sqrt(this.position.x * this.position.x + this.position.z * this.position.z);
-          const runsTaken = distFromWickets > 38 ? 2 : 1;
-          this.finishDelivery({
-            outcome: 'RUNS',
-            reason: `Fielded cleanly by ${closestFielder.name}`,
-            runs: runsTaken
-          }, characters, onResult);
-        }
-      }
     }
   }
 

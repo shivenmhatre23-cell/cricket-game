@@ -53,6 +53,7 @@ export class FieldingAI {
     this.throwProgress = 0;
     this.throwStart = new THREE.Vector3();
     this.throwTarget = new THREE.Vector3();
+    this.hasResolvedCatch = false;
   }
 
   // Set field placement preset
@@ -70,11 +71,34 @@ export class FieldingAI {
     });
   }
 
+  // Reset fielding state and return all fielders to ready stance
+  resetDeliveryState(characters) {
+    this.activeChaser = null;
+    this.reactionTimer = 0;
+    this.hasReacted = false;
+    this.isThrowing = false;
+    this.throwProgress = 0;
+    this.hasResolvedCatch = false;
+
+    if (characters && characters.fielders) {
+      characters.fielders.forEach(f => {
+        if (f.basePos) {
+          f.group.position.copy(f.basePos);
+          f.group.lookAt(0, 0.9, 9.15);
+        }
+        if (typeof characters.setFielderStance === 'function') {
+          characters.setFielderStance(f);
+        }
+      });
+    }
+  }
+
   // Called immediately when a shot is struck off the bat
   onShotStruck(ballPosition, ballVelocity, difficulty = 'MEDIUM') {
     this.activeChaser = null;
     this.isThrowing = false;
     this.throwProgress = 0;
+    this.hasResolvedCatch = false;
 
     // Reaction delay based on difficulty
     if (difficulty === 'EASY') this.reactionTimer = 0.32; // 320ms reaction delay
@@ -86,7 +110,7 @@ export class FieldingAI {
 
   // Update fielders chasing ball
   update(delta, ball, characters, difficulty = 'MEDIUM', onFielderAction) {
-    if (!ball.hasHitBat || ball.isDead) return;
+    if (!ball || !ball.hasHitBat || ball.isDead) return;
 
     // 1. Reaction Delay Countdown
     if (!this.hasReacted) {
@@ -123,6 +147,7 @@ export class FieldingAI {
     }
 
     // 3. Find closest fielder to intercept ball
+    if (!characters || !characters.fielders || characters.fielders.length === 0) return;
     const sprintSpeed = difficulty === 'EASY' ? 6.2 : (difficulty === 'HARD' ? 8.6 : 7.4);
 
     let closest = null;
@@ -146,13 +171,31 @@ export class FieldingAI {
 
       if (horizontalDist > 1.35) {
         toBall.normalize();
-        fPos.addScaledVector(toBall, sprintSpeed * delta);
+        // Prevent sudden overshooting by capping step to remaining distance
+        const step = Math.min(horizontalDist - 0.5, sprintSpeed * delta);
+        if (step > 0) {
+          fPos.addScaledVector(toBall, step);
+        }
+
+        // Clamp fielder within boundary rope (radius 64.5m)
+        const distFromCenter = Math.hypot(fPos.x, fPos.z);
+        if (distFromCenter > 64.5) {
+          fPos.x = (fPos.x / distFromCenter) * 64.5;
+          fPos.z = (fPos.z / distFromCenter) * 64.5;
+        }
+
         closest.group.lookAt(bPos.x, 0.9, bPos.z);
+
+        // Animate running stride
+        if (characters && typeof characters.animateFielderRun === 'function') {
+          characters.animateFielderRun(closest, delta, sprintSpeed);
+        }
       } else {
         // --- Intercept Zone Reached! ---
         const isAirborne = ball.bounceCount === 0 && bPos.y >= 0.35 && bPos.y <= 2.6;
 
-        if (isAirborne) {
+        if (isAirborne && !this.hasResolvedCatch) {
+          this.hasResolvedCatch = true;
           // --- Catch Attempt! ---
           let catchChance = 0.88;
           if (difficulty === 'EASY') catchChance = 0.70; // 30% drop rate on easy
@@ -164,6 +207,15 @@ export class FieldingAI {
             // SUCCESSFUL CATCH!
             ball.inPlay = false;
             ball.isDead = true;
+
+            // Ball to hands synchronization
+            ball.position.set(fPos.x, 1.25, fPos.z);
+            ball.mesh.position.copy(ball.position);
+
+            if (characters && typeof characters.setFielderCatchStance === 'function') {
+              characters.setFielderCatchStance(closest);
+            }
+
             if (onFielderAction) {
               onFielderAction({
                 action: 'CATCH_TAKEN',
@@ -174,7 +226,7 @@ export class FieldingAI {
             // DROPPED CATCH! Ball rebounds softly off palms and rolls
             ball.bounceCount = 1;
             ball.velocity.multiplyScalar(0.35);
-            ball.velocity.y = 1.5;
+            ball.velocity.y = 1.6;
             if (onFielderAction) {
               onFielderAction({
                 action: 'CATCH_DROPPED',
@@ -182,12 +234,16 @@ export class FieldingAI {
               });
             }
           }
-        } else {
+        } else if (!isAirborne) {
           // --- Ground Ball Pickup & Throw ---
           ball.inPlay = false;
           this.isThrowing = true;
           this.throwProgress = 0;
           this.throwStart.copy(bPos);
+
+          // Ball to fielder hands
+          ball.position.set(fPos.x, 0.5, fPos.z);
+          ball.mesh.position.copy(ball.position);
 
           // Choose closest wickets to throw to (Keeper wickets at Z=10.06 or Bowler wickets at Z=-10.06)
           const distToStrikerWickets = bPos.distanceTo(new THREE.Vector3(0, 0.7, 10.06));

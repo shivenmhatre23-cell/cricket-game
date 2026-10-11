@@ -185,6 +185,11 @@ class CricketGame {
     this.lastTimingQuality = null;
     this.characters.resetBatter();
     this.characters.strikerStumps.reset();
+    this.characters.nonStrikerStumps?.reset();
+    this.characters.setKeeperStance();
+
+    // Reset Fielding AI & fielders to base positions and ready stances
+    this.fieldingAI.resetDeliveryState(this.characters);
 
     // Generate new tactical delivery data with BowlingAI
     const deliveryData = this.gameState.generateDelivery();
@@ -453,6 +458,8 @@ class CricketGame {
         reason: `Fielded cleanly by ${event.fielderName}`,
         runs: event.runs
       }, this.characters, (res) => this.onDeliveryResult(res));
+    } else if (event.action === 'THROW_COMPLETED') {
+      soundManager.playPitchBounce(0.5);
     }
   }
 
@@ -649,8 +656,8 @@ class CricketGame {
         (evt) => this.handleFielderEvent(evt)
       );
 
-      // 6. Stumps and bails physics
-      this.characters.update(delta);
+      // 6. Stumps and bails physics & wicketkeeper tracking
+      this.characters.update(delta, this.ballPhysics.position);
 
       // 7. Camera smooth interpolation
       this.cameraManager.update(delta, this.ballPhysics, this.characters);
