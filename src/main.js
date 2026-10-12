@@ -118,6 +118,9 @@ class CricketGame {
     const battingColor = this.gameState.battingTeam?.color || '#1565c0';
     const bowlingColor = this.gameState.bowlingTeam?.color || '#2e7d32';
     this.characters.setTeamColors(battingColor, bowlingColor);
+    if (typeof this.characters.updateActivePlayers === 'function') {
+      this.characters.updateActivePlayers(this.gameState);
+    }
   }
 
   startNewMatch() {
@@ -255,6 +258,11 @@ class CricketGame {
     this.characters.strikerStumps.reset();
     this.characters.nonStrikerStumps?.reset();
     this.characters.setKeeperStance();
+
+    // Synchronize 3D player models with active striker, non-striker, bowler, and fielders
+    if (typeof this.characters.updateActivePlayers === 'function') {
+      this.characters.updateActivePlayers(this.gameState);
+    }
 
     // Reset Fielding AI & fielders to base positions and ready stances
     this.fieldingAI.resetDeliveryState(this.characters);

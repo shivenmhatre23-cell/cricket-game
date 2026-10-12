@@ -1,4 +1,396 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+// Procedural Face Material Generator with distinct facial features, complexion, and beards
+export function createFaceMaterial(playerData) {
+  const skinColor = playerData?.face?.skin || '#dcae86';
+  const beardType = playerData?.face?.beard || 'CLEAN_SHAVEN';
+  const hairColor = playerData?.face?.hair || '#1a120b';
+  const eyeColor = playerData?.face?.eyes || '#2c1e13';
+
+  if (typeof document === 'undefined') {
+    return new THREE.MeshStandardMaterial({
+      color: new THREE.Color(skinColor),
+      roughness: 0.8
+    });
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  // Base skin complexion
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(0, 0, 256, 256);
+
+  // Soft facial depth gradient (jaw / cheek contouring)
+  const grad = ctx.createRadialGradient(128, 110, 30, 128, 128, 120);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
+  grad.addColorStop(0.7, 'rgba(0, 0, 0, 0.0)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0.18)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 256);
+
+  // Hairline & Temples
+  ctx.fillStyle = hairColor;
+  ctx.beginPath();
+  ctx.moveTo(30, 0);
+  ctx.lineTo(226, 0);
+  ctx.lineTo(220, 52);
+  ctx.quadraticCurveTo(128, 42, 36, 52);
+  ctx.closePath();
+  ctx.fill();
+
+  // Sideburns
+  ctx.fillRect(32, 50, 18, 55);
+  ctx.fillRect(206, 50, 18, 55);
+
+  // Eyebrows
+  ctx.fillStyle = hairColor;
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = hairColor;
+  // Left eyebrow
+  ctx.beginPath();
+  ctx.moveTo(68, 92);
+  ctx.quadraticCurveTo(95, 84, 116, 91);
+  ctx.stroke();
+
+  // Right eyebrow
+  ctx.beginPath();
+  ctx.moveTo(140, 91);
+  ctx.quadraticCurveTo(161, 84, 188, 92);
+  ctx.stroke();
+
+  // Eyes (Sclera + Iris + Pupil + Highlight)
+  const drawEye = (cx, cy) => {
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 14, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Iris
+    ctx.fillStyle = eyeColor;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pupil
+    ctx.fillStyle = '#0a0a0a';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eye catchlight glint
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.beginPath();
+    ctx.arc(cx - 1.5, cy - 1.5, 1.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Upper eyelid line
+    ctx.strokeStyle = 'rgba(20, 15, 10, 0.7)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 1, 14, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.stroke();
+  };
+  drawEye(92, 106);
+  drawEye(164, 106);
+
+  // Nose bridge & nostrils
+  ctx.strokeStyle = 'rgba(60, 35, 15, 0.25)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(128, 98);
+  ctx.lineTo(124, 142);
+  ctx.lineTo(132, 142);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(50, 25, 10, 0.35)';
+  ctx.beginPath();
+  ctx.ellipse(120, 145, 3.5, 2, 0, 0, Math.PI * 2);
+  ctx.ellipse(136, 145, 3.5, 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Lips
+  ctx.fillStyle = 'rgba(160, 70, 60, 0.55)';
+  ctx.beginPath();
+  ctx.ellipse(128, 172, 16, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(100, 35, 30, 0.6)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(114, 172);
+  ctx.lineTo(142, 172);
+  ctx.stroke();
+
+  // Unique Facial Hair / Beard Styles
+  ctx.fillStyle = hairColor;
+  ctx.strokeStyle = hairColor;
+
+  if (beardType === 'STYLED_BEARD') {
+    // Signature Virat Kohli trimmed chiseled beard
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    ctx.moveTo(48, 120);
+    ctx.quadraticCurveTo(128, 226, 208, 120);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(128, 194, 22, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(128, 162, 19, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (beardType === 'FULL_TRIMMED') {
+    // Rohit Sharma / Tim David full trimmed beard
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(44, 115);
+    ctx.quadraticCurveTo(128, 230, 212, 115);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(128, 192, 28, 22, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(128, 162, 20, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (beardType === 'WARRIOR_BEARD') {
+    // Ravindra Jadeja dense Rajputana beard
+    ctx.lineWidth = 16;
+    ctx.beginPath();
+    ctx.moveTo(42, 110);
+    ctx.quadraticCurveTo(128, 236, 214, 110);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(128, 196, 34, 24, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(100, 165);
+    ctx.quadraticCurveTo(128, 155, 156, 165);
+    ctx.stroke();
+  } else if (beardType === 'GOATEE_STUBBLE') {
+    // Hardik Pandya goatee & soul patch
+    ctx.beginPath();
+    ctx.ellipse(128, 194, 15, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(128, 163, 16, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(20, 15, 10, 0.28)';
+    ctx.fillRect(52, 140, 152, 50);
+  } else if (beardType === 'MOUSTACHE') {
+    // Travis Head classic moustache
+    ctx.beginPath();
+    ctx.ellipse(128, 160, 24, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (beardType === 'MOUSTACHE_STUBBLE') {
+    ctx.beginPath();
+    ctx.ellipse(128, 161, 21, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(20, 15, 10, 0.25)';
+    ctx.fillRect(60, 160, 136, 40);
+  } else if (beardType === 'FULL_BEARD') {
+    // Moeen Ali / Adil Rashid / Iftikhar Ahmed
+    ctx.beginPath();
+    ctx.ellipse(128, 196, 40, 36, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(128, 160, 25, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (beardType === 'RED_BEARD') {
+    // Jonny Bairstow ginger beard
+    ctx.fillStyle = '#b8542c';
+    ctx.beginPath();
+    ctx.ellipse(128, 192, 28, 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(128, 162, 19, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (beardType.includes('STUBBLE') || beardType.includes('LIGHT')) {
+    ctx.fillStyle = 'rgba(20, 15, 10, 0.24)';
+    ctx.beginPath();
+    ctx.ellipse(128, 185, 36, 26, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  return new THREE.MeshStandardMaterial({
+    map: texture,
+    roughness: 0.75,
+    metalness: 0.05
+  });
+}
+
+// Procedural Multi-Face Jersey Material with authentic team front & back player name / big number
+export function createJerseyMaterials(playerData, teamData) {
+  const team = teamData || {
+    name: 'India',
+    color: '#1565c0',
+    kit: {
+      primary: '#1565c0',
+      secondary: '#ff6f00',
+      accent: '#0d47a1',
+      text: '#ffffff',
+      countryText: 'INDIA'
+    }
+  };
+  const kit = team.kit || {
+    primary: team.color || '#1565c0',
+    secondary: '#ff6f00',
+    accent: '#0d47a1',
+    text: '#ffffff',
+    countryText: team.name?.toUpperCase() || 'CRICKET'
+  };
+
+  const playerName = playerData?.name || 'PLAYER';
+  let displaySurname = playerName.replace(/\s*\(.*?\)\s*/g, '').trim();
+  const nameParts = displaySurname.split(/\s+/);
+  if (nameParts.length > 1) {
+    displaySurname = nameParts[nameParts.length - 1].toUpperCase();
+  } else {
+    displaySurname = displaySurname.toUpperCase();
+  }
+  const jerseyNumber = playerData?.number !== undefined ? String(playerData.number) : '00';
+
+  if (typeof document === 'undefined') {
+    const fallbackMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(kit.primary),
+      roughness: 0.65
+    });
+    return [fallbackMat, fallbackMat, fallbackMat, fallbackMat, fallbackMat, fallbackMat];
+  }
+
+  // --- Front Material (Chest with Country Name, Crest, Collar) ---
+  const frontCanvas = document.createElement('canvas');
+  frontCanvas.width = 256;
+  frontCanvas.height = 256;
+  const fctx = frontCanvas.getContext('2d');
+
+  fctx.fillStyle = kit.primary;
+  fctx.fillRect(0, 0, 256, 256);
+
+  // Subtle athletic jersey honeycomb / angled stripe pattern
+  fctx.fillStyle = kit.secondary;
+  fctx.globalAlpha = 0.22;
+  for (let i = 0; i < 256; i += 28) {
+    fctx.fillRect(i, 0, 6, 256);
+  }
+  fctx.globalAlpha = 1.0;
+
+  // Collar V-neck chevron
+  fctx.fillStyle = kit.secondary;
+  fctx.beginPath();
+  fctx.moveTo(90, 0);
+  fctx.lineTo(128, 48);
+  fctx.lineTo(166, 0);
+  fctx.closePath();
+  fctx.fill();
+
+  fctx.fillStyle = kit.accent;
+  fctx.beginPath();
+  fctx.moveTo(104, 0);
+  fctx.lineTo(128, 32);
+  fctx.lineTo(152, 0);
+  fctx.closePath();
+  fctx.fill();
+
+  // Left chest: National Cricket Emblem / Crest badge
+  fctx.fillStyle = kit.secondary;
+  fctx.beginPath();
+  fctx.arc(64, 82, 14, 0, Math.PI * 2);
+  fctx.fill();
+  fctx.fillStyle = '#ffffff';
+  fctx.beginPath();
+  fctx.arc(64, 82, 9, 0, Math.PI * 2);
+  fctx.fill();
+  fctx.fillStyle = kit.accent;
+  fctx.font = 'bold 11px sans-serif';
+  fctx.textAlign = 'center';
+  fctx.textBaseline = 'middle';
+  fctx.fillText('★', 64, 82);
+
+  // Right chest: small jersey number
+  fctx.fillStyle = kit.text;
+  fctx.font = '900 16px monospace';
+  fctx.textAlign = 'center';
+  fctx.textBaseline = 'middle';
+  fctx.fillText(jerseyNumber, 192, 82);
+
+  // Country Name in bold varsity letters across chest
+  fctx.fillStyle = kit.text;
+  fctx.font = '900 32px sans-serif';
+  fctx.textAlign = 'center';
+  fctx.textBaseline = 'middle';
+  fctx.shadowColor = 'rgba(0,0,0,0.6)';
+  fctx.shadowBlur = 4;
+  fctx.fillText(kit.countryText || team.name.toUpperCase(), 128, 140);
+  fctx.shadowBlur = 0;
+
+  // Lower waist trim band
+  fctx.fillStyle = kit.secondary;
+  fctx.fillRect(0, 242, 256, 14);
+
+  const frontTexture = new THREE.CanvasTexture(frontCanvas);
+  const frontMat = new THREE.MeshStandardMaterial({ map: frontTexture, roughness: 0.65 });
+
+  // --- Back Material (Player Name + Large Jersey Number) ---
+  const backCanvas = document.createElement('canvas');
+  backCanvas.width = 256;
+  backCanvas.height = 256;
+  const bctx = backCanvas.getContext('2d');
+
+  bctx.fillStyle = kit.primary;
+  bctx.fillRect(0, 0, 256, 256);
+
+  // Upper back yoke band
+  bctx.fillStyle = kit.secondary;
+  bctx.fillRect(0, 0, 256, 24);
+
+  // Player Surname in arched bold capital letters
+  bctx.fillStyle = kit.text;
+  bctx.font = '900 28px sans-serif';
+  bctx.textAlign = 'center';
+  bctx.textBaseline = 'middle';
+  bctx.shadowColor = 'rgba(0,0,0,0.6)';
+  bctx.shadowBlur = 4;
+  bctx.fillText(displaySurname, 128, 58);
+
+  // Giant 2-Digit Jersey Number
+  bctx.font = '900 96px sans-serif';
+  bctx.lineWidth = 6;
+  bctx.strokeStyle = kit.accent;
+  bctx.strokeText(jerseyNumber, 128, 150);
+  bctx.fillText(jerseyNumber, 128, 150);
+  bctx.shadowBlur = 0;
+
+  // Lower waist band
+  bctx.fillStyle = kit.secondary;
+  bctx.fillRect(0, 242, 256, 14);
+
+  const backTexture = new THREE.CanvasTexture(backCanvas);
+  const backMat = new THREE.MeshStandardMaterial({ map: backTexture, roughness: 0.65 });
+
+  // --- Sides Material with Athletic Racing Stripe ---
+  const sideCanvas = document.createElement('canvas');
+  sideCanvas.width = 128;
+  sideCanvas.height = 256;
+  const sctx = sideCanvas.getContext('2d');
+  sctx.fillStyle = kit.primary;
+  sctx.fillRect(0, 0, 128, 256);
+  sctx.fillStyle = kit.secondary;
+  sctx.fillRect(52, 0, 24, 256);
+  sctx.fillStyle = kit.accent;
+  sctx.fillRect(60, 0, 8, 256);
+  const sideTexture = new THREE.CanvasTexture(sideCanvas);
+  const sideMat = new THREE.MeshStandardMaterial({ map: sideTexture, roughness: 0.65 });
+
+  // Top & Bottom
+  const capMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(kit.primary), roughness: 0.65 });
+
+  // Order for Three.js BoxGeometry: [right(+x), left(-x), top(+y), bottom(-y), front(+z), back(-z)]
+  return [sideMat, sideMat, capMat, capMat, frontMat, backMat];
+}
 
 // Shared Geometries Cache to optimize memory and draw calls across all players
 const GEOMETRY_CACHE = {
@@ -146,17 +538,31 @@ export class CharacterManager {
   }
 
   // --- 2. Fully Articulated Humanoid Player Builder ---
-  buildPlayer({ jerseyMaterial, isBatsman = false, hasPads = false, isUmpire = false, isKeeper = false }) {
+  buildPlayer({ jerseyMaterial, isBatsman = false, hasPads = false, isUmpire = false, isKeeper = false, playerData = null, teamData = null }) {
     const group = new THREE.Group();
     const mats = this.sharedMaterials;
+
+    const kit = teamData?.kit || {
+      primary: teamData?.color || '#1565c0',
+      secondary: '#ff6f00',
+      accent: '#0d47a1',
+      pants: '#0d47a1',
+      pads: '#0d47a1',
+      helmet: '#0d47a1',
+      text: '#ffffff'
+    };
 
     // Pelvis / Hips Root
     const hips = new THREE.Group();
     hips.position.y = 0.95;
     group.add(hips);
 
-    // Torso (Jersey)
-    const torsoMesh = new THREE.Mesh(GEOMETRY_CACHE.torso, isUmpire ? mats.umpireShirt : jerseyMaterial);
+    // Torso (Jersey with authentic country front and player name + big number back)
+    const torsoMat = (playerData && teamData)
+      ? createJerseyMaterials(playerData, teamData)
+      : (isUmpire ? mats.umpireShirt : (jerseyMaterial || this.battingKitMat));
+
+    const torsoMesh = new THREE.Mesh(GEOMETRY_CACHE.torso, torsoMat);
     torsoMesh.castShadow = true;
     hips.add(torsoMesh);
 
@@ -165,16 +571,25 @@ export class CharacterManager {
     headGroup.position.y = 0.62;
     hips.add(headGroup);
 
-    const headMesh = new THREE.Mesh(GEOMETRY_CACHE.head, mats.skin);
+    // Head Face with distinct player complexion, eyes, eyebrows, nose, and styled beard
+    const headMat = playerData ? createFaceMaterial(playerData) : mats.skin;
+    const headMesh = new THREE.Mesh(GEOMETRY_CACHE.head, headMat);
     headGroup.add(headMesh);
 
+    let helmetMesh = null;
+    let visor = null;
+
     if (!isUmpire) {
-      // Cricket Helmet with peak visor and face grille
-      const helmetMesh = new THREE.Mesh(GEOMETRY_CACHE.helmet, mats.helmet);
+      // Cricket Helmet with peak visor and face grille in team helmet color
+      const helmetColorMat = kit.helmet
+        ? new THREE.MeshStandardMaterial({ color: new THREE.Color(kit.helmet), roughness: 0.4 })
+        : mats.helmet;
+
+      helmetMesh = new THREE.Mesh(GEOMETRY_CACHE.helmet, helmetColorMat);
       helmetMesh.position.set(0, 0.02, -0.01);
       headGroup.add(helmetMesh);
 
-      const visor = new THREE.Mesh(GEOMETRY_CACHE.visor, mats.helmet);
+      visor = new THREE.Mesh(GEOMETRY_CACHE.visor, helmetColorMat);
       visor.position.set(0, 0.02, 0.14);
       headGroup.add(visor);
 
@@ -193,12 +608,22 @@ export class CharacterManager {
       headGroup.add(brim, top);
     }
 
-    // Legs with Hip and Knee articulations
+    // Legs with Hip and Knee articulations in team pants color
+    const pantsMat = (!isUmpire && kit.pants)
+      ? new THREE.MeshStandardMaterial({ color: new THREE.Color(kit.pants), roughness: 0.85 })
+      : mats.pants;
+
+    const padMat = (hasPads && kit.pads)
+      ? new THREE.MeshStandardMaterial({ color: new THREE.Color(kit.pads), roughness: 0.55 })
+      : mats.pad;
+
+    const padsList = [];
+
     const createLeg = (xOffset) => {
       const hipJoint = new THREE.Group();
       hipJoint.position.set(xOffset, 0, 0);
 
-      const thigh = new THREE.Mesh(GEOMETRY_CACHE.thigh, mats.pants);
+      const thigh = new THREE.Mesh(GEOMETRY_CACHE.thigh, pantsMat);
       thigh.castShadow = true;
       hipJoint.add(thigh);
 
@@ -206,20 +631,22 @@ export class CharacterManager {
       kneeJoint.position.y = -0.46;
       hipJoint.add(kneeJoint);
 
-      const shin = new THREE.Mesh(GEOMETRY_CACHE.shin, mats.pants);
+      const shin = new THREE.Mesh(GEOMETRY_CACHE.shin, pantsMat);
       shin.castShadow = true;
       kneeJoint.add(shin);
 
-      // Cricket Batting / Keeper Pads
+      // Cricket Batting / Keeper Pads in team kit color
       if (hasPads) {
-        const padMesh = new THREE.Mesh(GEOMETRY_CACHE.pad, mats.pad);
+        const padMesh = new THREE.Mesh(GEOMETRY_CACHE.pad, padMat);
         padMesh.position.set(0, -0.2, 0.06);
         padMesh.castShadow = true;
         kneeJoint.add(padMesh);
 
-        const kneeRoll = new THREE.Mesh(GEOMETRY_CACHE.padKneeRoll, mats.pad);
+        const kneeRoll = new THREE.Mesh(GEOMETRY_CACHE.padKneeRoll, padMat);
         kneeRoll.position.set(0, -0.02, 0.1);
         kneeJoint.add(kneeRoll);
+
+        padsList.push(padMesh, kneeRoll);
       }
 
       // Shoes
@@ -229,18 +656,22 @@ export class CharacterManager {
       kneeJoint.add(shoe);
 
       hips.add(hipJoint);
-      return { hip: hipJoint, knee: kneeJoint };
+      return { hip: hipJoint, knee: kneeJoint, thigh, shin };
     };
 
     const leftLeg = createLeg(-0.13);
     const rightLeg = createLeg(0.13);
 
     // Arms with Shoulder and Elbow articulations
+    const sleeveMat = (!isUmpire && kit.primary)
+      ? new THREE.MeshStandardMaterial({ color: new THREE.Color(kit.primary), roughness: 0.65 })
+      : (isUmpire ? mats.umpireShirt : jerseyMaterial);
+
     const createArm = (xOffset) => {
       const shoulderJoint = new THREE.Group();
       shoulderJoint.position.set(xOffset, 0.5, 0);
 
-      const bicep = new THREE.Mesh(GEOMETRY_CACHE.bicep, isUmpire ? mats.umpireShirt : jerseyMaterial);
+      const bicep = new THREE.Mesh(GEOMETRY_CACHE.bicep, sleeveMat);
       bicep.castShadow = true;
       shoulderJoint.add(bicep);
 
@@ -253,13 +684,13 @@ export class CharacterManager {
       elbowJoint.add(forearm);
 
       // Glove / Hand
-      const glove = new THREE.Mesh(GEOMETRY_CACHE.glove, hasPads ? mats.pad : mats.skin);
+      const glove = new THREE.Mesh(GEOMETRY_CACHE.glove, hasPads ? padMat : mats.skin);
       glove.position.y = -0.32;
       glove.castShadow = true;
       elbowJoint.add(glove);
 
       hips.add(shoulderJoint);
-      return { shoulder: shoulderJoint, elbow: elbowJoint, glove };
+      return { shoulder: shoulderJoint, elbow: elbowJoint, bicep, glove };
     };
 
     const leftArm = createArm(-0.25);
@@ -295,6 +726,9 @@ export class CharacterManager {
       hips,
       torso: torsoMesh,
       head: headGroup,
+      headMesh,
+      helmetMesh,
+      visor,
       leftLeg,
       rightLeg,
       leftArm,
@@ -302,37 +736,89 @@ export class CharacterManager {
       bat,
       isBatsman,
       isUmpire,
-      isKeeper
+      isKeeper,
+      sleeves: [leftArm.bicep, rightArm.bicep],
+      pants: [leftLeg.thigh, leftLeg.shin, rightLeg.thigh, rightLeg.shin],
+      pads: padsList,
+      userData: {
+        player: playerData,
+        team: teamData
+      }
     };
   }
 
   // --- 3. Instantiate Pitch & Field Lineups ---
   initPlayers() {
-    // Striker Batsman positioned accurately inside popping crease (at Z = 9.15m)
+    const defaultInd = {
+      name: 'India',
+      color: '#1565c0',
+      kit: {
+        primary: '#1565c0',
+        secondary: '#ff6f00',
+        accent: '#0d47a1',
+        pants: '#0d47a1',
+        pads: '#0d47a1',
+        helmet: '#0d47a1',
+        text: '#ffffff',
+        countryText: 'INDIA'
+      },
+      players: [
+        { name: 'R. Sharma (C)', number: 45, role: 'BAT', face: { skin: '#d89b6a', beard: 'FULL_TRIMMED', hair: '#1a120b', eyes: '#2c1e13' } },
+        { name: 'S. Gill', number: 77, role: 'BAT', face: { skin: '#dfa87a', beard: 'CLEAN_SHAVEN', hair: '#1a120b', eyes: '#2c1e13' } },
+        { name: 'V. Kohli', number: 18, role: 'BAT', face: { skin: '#d59868', beard: 'STYLED_BEARD', hair: '#140e09', eyes: '#2c1e13' } }
+      ]
+    };
+
+    const defaultAus = {
+      name: 'Australia',
+      color: '#fbc02d',
+      kit: {
+        primary: '#fbc02d',
+        secondary: '#1b5e20',
+        accent: '#004d40',
+        pants: '#1b5e20',
+        pads: '#fbc02d',
+        helmet: '#1b5e20',
+        text: '#1b5e20',
+        countryText: 'AUSTRALIA'
+      },
+      players: [
+        { name: 'P. Cummins', number: 30, role: 'BOWL', face: { skin: '#f2ccaa', beard: 'CLEAN_SHAVEN', hair: '#8d6d48', eyes: '#3f6782' } },
+        { name: 'M. Wade (WK)', number: 13, role: 'WK', face: { skin: '#ecc4a2', beard: 'CLEAN_SHAVEN', hair: '#443021', eyes: '#3a536b' } }
+      ]
+    };
+
+    // Striker Batsman positioned inside popping crease (default V. Kohli #18)
     this.batter = this.buildPlayer({
       jerseyMaterial: this.battingKitMat,
       isBatsman: true,
-      hasPads: true
+      hasPads: true,
+      playerData: defaultInd.players[2],
+      teamData: defaultInd
     });
     this.batter.group.position.set(0.1, 0, 9.15);
-    this.batter.group.rotation.y = Math.PI; // Face the bowler (-Z)
+    this.batter.group.rotation.y = Math.PI; // Face bowler (-Z)
     this.setBatsmanStance();
 
-    // Non-Striker Batsman at non-striker popping crease (Z = -8.6m)
+    // Non-Striker Batsman at non-striker popping crease (default R. Sharma #45)
     this.nonStriker = this.buildPlayer({
       jerseyMaterial: this.battingKitMat,
       isBatsman: true,
-      hasPads: true
+      hasPads: true,
+      playerData: defaultInd.players[0],
+      teamData: defaultInd
     });
     this.nonStriker.group.position.set(1.2, 0, -8.6);
     this.nonStriker.group.rotation.y = 0; // Face striker (+Z)
     this.setNonStrikerStance();
 
-    // Bowler starting run-up at Z = -24m
+    // Bowler starting run-up at Z = -24m (default P. Cummins #30)
     this.bowler = this.buildPlayer({
       jerseyMaterial: this.bowlingKitMat,
       isBatsman: false,
-      hasPads: false
+      hasPads: false,
+      playerData: defaultAus.players[0],
+      teamData: defaultAus
     });
     this.bowler.group.position.set(0.8, 0, -24.0);
     this.bowler.group.rotation.y = 0; // Facing striker
@@ -353,7 +839,9 @@ export class CharacterManager {
       jerseyMaterial: this.bowlingKitMat,
       isBatsman: false,
       hasPads: true,
-      isKeeper: true
+      isKeeper: true,
+      playerData: defaultAus.players[1],
+      teamData: defaultAus
     });
     this.keeper.group.position.set(0, 0, 11.8);
     this.keeper.group.rotation.y = Math.PI;
@@ -373,11 +861,12 @@ export class CharacterManager {
       { name: 'Third Man', x: -18.5, z: 26.0 }
     ];
 
-    this.fielders = fielderPlacements.map(pos => {
+    this.fielders = fielderPlacements.map((pos) => {
       const f = this.buildPlayer({
         jerseyMaterial: this.bowlingKitMat,
         isBatsman: false,
-        hasPads: false
+        hasPads: false,
+        teamData: defaultAus
       });
       f.group.position.set(pos.x, 0, pos.z);
       f.group.lookAt(0, 0.9, 9.15); // Look towards striker
@@ -386,6 +875,9 @@ export class CharacterManager {
       this.setFielderStance(f);
       return f;
     });
+
+    // Check and load external player GLTF model if dropped in public/models
+    this.loadExternalPlayerModel();
   }
 
   // Safe joint transforms preventing crashes on missing optional bones
@@ -842,6 +1334,159 @@ export class CharacterManager {
     if (bowlingColor && this.bowlingKitMat) {
       this.bowlingKitMat.color.set(bowlingColor);
     }
+  }
+
+  // Load external Sketchfab 3D Player Model (Indian Cricket Player Rigged) if present
+  loadExternalPlayerModel() {
+    if (typeof window === 'undefined' || typeof document === 'undefined' || !this.scene) return;
+
+    try {
+      const loader = new GLTFLoader();
+      const modelCandidates = ['/models/indian_cricket_player.glb', '/models/player.glb'];
+
+      const tryLoadCandidate = (index) => {
+        if (index >= modelCandidates.length) return;
+        loader.load(
+          modelCandidates[index],
+          (gltf) => {
+            const externalModel = gltf.scene;
+            externalModel.traverse((child) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            });
+            this.externalPlayerModel = externalModel;
+          },
+          undefined,
+          () => {
+            tryLoadCandidate(index + 1);
+          }
+        );
+      };
+
+      tryLoadCandidate(0);
+    } catch {
+      // Graceful fallback to procedural player models
+    }
+  }
+
+  // Apply complete individual player identity: authentic name & big number jersey, custom face & beard, team kit
+  applyPlayerIdentity(playerObj, playerData, teamData) {
+    if (!playerObj) return;
+
+    playerObj.userData.player = playerData;
+    playerObj.userData.team = teamData;
+
+    // 1. Update Torso Jersey Materials (Front country chest + Back name and big number)
+    if (playerObj.torso) {
+      playerObj.torso.material = createJerseyMaterials(playerData, teamData);
+    }
+
+    // 2. Update Head Face Material (Skin tone, eyes, eyebrows, nose, mouth, custom beard)
+    if (playerObj.headMesh) {
+      playerObj.headMesh.material = createFaceMaterial(playerData);
+    }
+
+    const kit = teamData?.kit || {
+      primary: teamData?.color || '#1565c0',
+      secondary: '#ff6f00',
+      accent: '#0d47a1',
+      pants: '#0d47a1',
+      pads: '#0d47a1',
+      helmet: '#0d47a1',
+      text: '#ffffff'
+    };
+
+    // 3. Update Sleeves
+    if (playerObj.sleeves && playerObj.sleeves.length > 0) {
+      const sleeveMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(kit.primary),
+        roughness: 0.65
+      });
+      playerObj.sleeves.forEach(s => {
+        if (s) s.material = sleeveMat;
+      });
+    }
+
+    // 4. Update Pants
+    if (playerObj.pants && playerObj.pants.length > 0) {
+      const pantsMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(kit.pants || kit.accent || kit.primary),
+        roughness: 0.85
+      });
+      playerObj.pants.forEach(p => {
+        if (p) p.material = pantsMat;
+      });
+    }
+
+    // 5. Update Helmet & Visor
+    if (playerObj.helmetMesh) {
+      const helmetMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(kit.helmet || kit.accent || kit.primary),
+        roughness: 0.4
+      });
+      playerObj.helmetMesh.material = helmetMat;
+      if (playerObj.visor) playerObj.visor.material = helmetMat;
+    }
+
+    // 6. Update Pads (if character has pads)
+    if (playerObj.pads && playerObj.pads.length > 0) {
+      const padMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(kit.pads || kit.primary),
+        roughness: 0.55
+      });
+      playerObj.pads.forEach(p => {
+        if (p) p.material = padMat;
+      });
+    }
+  }
+
+  // Update active 3D characters to match match state rosters (striker, non-striker, bowler, keeper, fielders)
+  updateActivePlayers(gameState) {
+    if (!gameState) return;
+
+    const battingTeam = gameState.battingTeam;
+    const bowlingTeam = gameState.bowlingTeam;
+
+    if (!battingTeam || !bowlingTeam) return;
+
+    // Batters
+    const striker = gameState.getStriker();
+    const nonStriker = gameState.getNonStriker();
+
+    if (this.batter) {
+      this.applyPlayerIdentity(this.batter, striker, battingTeam);
+    }
+    if (this.nonStriker) {
+      this.applyPlayerIdentity(this.nonStriker, nonStriker, battingTeam);
+    }
+
+    // Bowler
+    const bowler = gameState.getCurrentBowler();
+    if (this.bowler) {
+      this.applyPlayerIdentity(this.bowler, bowler, bowlingTeam);
+    }
+
+    // Wicketkeeper (find player with role 'WK' in bowling team)
+    const keeperData = bowlingTeam.players?.find(p => p.role === 'WK') ||
+      bowlingTeam.players?.[5] ||
+      { name: 'Keeper', number: 1, role: 'WK' };
+
+    if (this.keeper) {
+      this.applyPlayerIdentity(this.keeper, keeperData, bowlingTeam);
+    }
+
+    // Fielders: assign each of the 10 fielders to a unique player from the bowling team
+    if (this.fielders && this.fielders.length > 0 && bowlingTeam.players) {
+      const available = bowlingTeam.players.filter(p => p.name !== bowler?.name && p.name !== keeperData.name);
+      this.fielders.forEach((f, idx) => {
+        const pData = available[idx % available.length] || bowlingTeam.players[idx % bowlingTeam.players.length];
+        this.applyPlayerIdentity(f, pData, bowlingTeam);
+      });
+    }
+
+    this.setTeamColors(battingTeam.color || battingTeam.kit?.primary, bowlingTeam.color || bowlingTeam.kit?.primary);
   }
 }
 

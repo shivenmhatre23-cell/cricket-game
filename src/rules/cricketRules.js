@@ -73,6 +73,9 @@ export class CricketRulesEngine {
     this.batterStats = this.battingTeam.players.map((p, idx) => ({
       index: idx,
       name: p.name,
+      number: p.number,
+      face: p.face,
+      role: p.role,
       runs: 0,
       balls: 0,
       fours: 0,
@@ -84,6 +87,9 @@ export class CricketRulesEngine {
     this.bowlerStats = this.bowlingTeam.players.map((p, idx) => ({
       index: idx,
       name: p.name,
+      number: p.number,
+      face: p.face,
+      role: p.role,
       legalBalls: 0,
       overs: 0,
       maidens: 0,
