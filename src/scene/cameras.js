@@ -5,7 +5,8 @@ export const CAMERA_MODES = {
   BOWLER_RUNUP: 1,
   BALL_FOLLOW: 2,
   TV_BROADCAST: 3,
-  AERIAL_TACTICAL: 4
+  AERIAL_TACTICAL: 4,
+  CINEMATIC_INTRO: 5
 };
 
 export const CAMERA_NAMES = [
@@ -13,7 +14,8 @@ export const CAMERA_NAMES = [
   'Bowler Action Cam',
   'Ball Follow Cam',
   'TV Broadcast Cam',
-  'Tactical Aerial Cam'
+  'Tactical Aerial Cam',
+  'Stadium Broadcast Intro Cam'
 ];
 
 export class CameraManager {
@@ -52,6 +54,11 @@ export class CameraManager {
       }
     };
 
+    // Pre-match Stadium Drone Fly-around state
+    this.introProgress = 0;
+    this.introDuration = 7.5;
+    this.onIntroComplete = null;
+
     // Bat impact micro-trauma state
     this.shakeIntensity = 0;
     this.shakeTimer = 0;
@@ -65,19 +72,43 @@ export class CameraManager {
   }
 
   setMode(mode) {
-    if (this.presets[mode] !== undefined) {
+    if (this.presets[mode] !== undefined || mode === CAMERA_MODES.CINEMATIC_INTRO) {
       this.currentMode = mode;
     }
   }
 
   nextMode() {
-    const totalModes = Object.keys(CAMERA_MODES).length;
-    this.currentMode = (this.currentMode + 1) % totalModes;
+    // Only cycle gameplay modes 0-4
+    const gameplayModesCount = 5;
+    this.currentMode = (this.currentMode + 1) % gameplayModesCount;
     return this.currentMode;
   }
 
   getModeName() {
-    return CAMERA_NAMES[this.currentMode];
+    return CAMERA_NAMES[this.currentMode] || 'Broadcast Batting Cam';
+  }
+
+  // Pre-match Cinematic Drone Fly-around showing the whole Narendra Modi Stadium & spectators
+  startIntro(duration = 7.5, onComplete = null) {
+    this.currentMode = CAMERA_MODES.CINEMATIC_INTRO;
+    this.introProgress = 0;
+    this.introDuration = Math.max(1.0, duration);
+    this.onIntroComplete = onComplete;
+  }
+
+  skipIntro() {
+    if (this.currentMode === CAMERA_MODES.CINEMATIC_INTRO) {
+      this.currentMode = this.defaultMode;
+      this.camera.position.copy(this.presets[this.defaultMode].pos);
+      this.currentLookAt.copy(this.presets[this.defaultMode].lookAt);
+      this.camera.lookAt(this.currentLookAt);
+
+      if (typeof this.onIntroComplete === 'function') {
+        const cb = this.onIntroComplete;
+        this.onIntroComplete = null;
+        cb();
+      }
+    }
   }
 
   // Apply subtle micro-shake impulse upon bat impact
@@ -102,6 +133,53 @@ export class CameraManager {
     const desiredLookAt = this.targetLookAt;
 
     switch (this.currentMode) {
+      case CAMERA_MODES.CINEMATIC_INTRO: {
+        this.introProgress += delta / this.introDuration;
+        if (this.introProgress >= 1.0) {
+          this.skipIntro();
+          return;
+        }
+
+        const p = Math.min(1.0, this.introProgress);
+
+        if (p < 0.40) {
+          // Act 1 (0 to 0.40): High sweeping drone orbit around Narendra Modi Stadium exterior & roof canopy
+          const t = p / 0.40;
+          const easeT = 0.5 - 0.5 * Math.cos(t * Math.PI); // Smooth S-curve
+          const angle = -1.35 + easeT * 1.6; // ~90 degree panoramic arc
+          const radius = THREE.MathUtils.lerp(120, 95, easeT);
+          const height = THREE.MathUtils.lerp(58, 38, easeT);
+
+          desiredPos.set(Math.sin(angle) * radius, height, Math.cos(angle) * radius);
+          desiredLookAt.set(0, 6.0, 0); // Focus on pitch and stadium center
+        } else if (p < 0.75) {
+          // Act 2 (0.40 to 0.75): Swooping low across the cheering grandstand crowd & giant video boards
+          const t = (p - 0.40) / 0.35;
+          const easeT = 0.5 - 0.5 * Math.cos(t * Math.PI);
+
+          const startPos = new THREE.Vector3(Math.sin(0.25) * 95, 38, Math.cos(0.25) * 95);
+          const endPos = new THREE.Vector3(-12, 6.8, -32);
+          desiredPos.lerpVectors(startPos, endPos, easeT);
+
+          const startLook = new THREE.Vector3(0, 6.0, 0);
+          const endLook = new THREE.Vector3(0, 1.2, 5.0);
+          desiredLookAt.lerpVectors(startLook, endLook, easeT);
+        } else {
+          // Act 3 (0.75 to 1.0): Glide along pitch corridor from bowler's end directly into batting broadcast cam
+          const t = (p - 0.75) / 0.25;
+          const easeT = t * t * (3 - 2 * t); // Smoothstep
+
+          const startPos = new THREE.Vector3(-12, 6.8, -32);
+          const endPos = this.presets[CAMERA_MODES.BROADCAST_BATTING].pos;
+          desiredPos.lerpVectors(startPos, endPos, easeT);
+
+          const startLook = new THREE.Vector3(0, 1.2, 5.0);
+          const endLook = this.presets[CAMERA_MODES.BROADCAST_BATTING].lookAt;
+          desiredLookAt.lerpVectors(startLook, endLook, easeT);
+        }
+        break;
+      }
+
       case CAMERA_MODES.BROADCAST_BATTING:
         desiredPos.copy(this.presets[CAMERA_MODES.BROADCAST_BATTING].pos);
         // Track incoming ball smoothly if within pitch corridor
@@ -167,8 +245,11 @@ export class CameraManager {
       desiredPos.y += (Math.random() - 0.5) * currentShake * 0.6;
     }
 
-    // Smooth dampening interpolation
-    const lerpSpeed = Math.min(delta * 5.2, 1.0);
+    // Smooth dampening interpolation (use higher rate for cinematic intro to track spline accurately)
+    const lerpSpeed = this.currentMode === CAMERA_MODES.CINEMATIC_INTRO
+      ? Math.min(delta * 8.0, 1.0)
+      : Math.min(delta * 5.2, 1.0);
+
     this.camera.position.lerp(desiredPos, lerpSpeed);
     this.currentLookAt.lerp(desiredLookAt, lerpSpeed);
     this.camera.lookAt(this.currentLookAt);

@@ -127,6 +127,60 @@ class CricketGame {
     this.updateTeamColors();
     this.resetDeliveryState();
     this.hud.updateScoreboard();
+
+    // Cinematic Stadium Intro: Show Narendra Modi Stadium fly-around with spectators before match starts
+    this.playStadiumIntro();
+  }
+
+  playStadiumIntro() {
+    this.showStadiumIntroBanner();
+    soundManager.playCheer(0.85, 7.5);
+    this.hud.updateCameraLabel('Stadium Broadcast Intro');
+    this.hud.setActionCallout('🏟️ NARENDRA MODI STADIUM — PRESS <kbd>SPACE</kbd> OR CLICK TO SKIP INTRO');
+
+    this.cameraManager.startIntro(7.5, () => {
+      this.onStadiumIntroComplete();
+    });
+  }
+
+  showStadiumIntroBanner() {
+    let banner = document.getElementById('stadium-intro-banner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'stadium-intro-banner';
+      banner.className = 'stadium-intro-banner';
+      banner.innerHTML = `
+        <div class="intro-badge">VENUE SPOTLIGHT</div>
+        <div class="intro-venue-name">NARENDRA MODI STADIUM</div>
+        <div class="intro-venue-details">AHMEDABAD, GUJARAT • CAPACITY: 132,000 • LARGEST CRICKET STADIUM IN THE WORLD</div>
+        <div class="intro-pitch-info"><span>PITCH:</span> Hard Bouncy Red/Black Soil Clay &nbsp;|&nbsp; <span>ATMOSPHERE:</span> Roaring Full House</div>
+        <div class="intro-skip-hint">PRESS <kbd>SPACE</kbd> OR CLICK TO SKIP INTRO</div>
+      `;
+      banner.addEventListener('click', () => {
+        this.cameraManager.skipIntro();
+      });
+      const hudContainer = document.getElementById('hud-container');
+      if (hudContainer) hudContainer.appendChild(banner);
+    } else {
+      banner.classList.remove('fade-out');
+      banner.style.display = 'block';
+    }
+  }
+
+  hideStadiumIntroBanner() {
+    const banner = document.getElementById('stadium-intro-banner');
+    if (banner) {
+      banner.classList.add('fade-out');
+      setTimeout(() => {
+        if (banner && banner.parentNode) {
+          banner.parentNode.removeChild(banner);
+        }
+      }, 500);
+    }
+  }
+
+  onStadiumIntroComplete() {
+    this.hideStadiumIntroBanner();
     this.hud.updateCameraLabel(this.cameraManager.getModeName());
     this.gameState.setState(GAME_STATES.READY);
     const callout = this.gameState.isUserBatting()
@@ -137,6 +191,8 @@ class CricketGame {
 
   startPracticeMode() {
     soundManager.init();
+    this.hideStadiumIntroBanner();
+    this.cameraManager.skipIntro();
     this.isPracticeMode = true;
     this.practiceStats = {
       ballsFaced: 0,
@@ -154,6 +210,8 @@ class CricketGame {
   }
 
   rebowlDelivery() {
+    this.hideStadiumIntroBanner();
+    this.cameraManager.skipIntro();
     this.resetDeliveryState();
     this.gameState.setState(GAME_STATES.READY);
     const msg = this.isPracticeMode
@@ -165,6 +223,8 @@ class CricketGame {
   }
 
   restartMatch() {
+    this.hideStadiumIntroBanner();
+    this.cameraManager.skipIntro();
     this.gameState.resetInnings();
     this.updateTeamColors();
     this.resetDeliveryState();
@@ -301,9 +361,25 @@ class CricketGame {
         this.selectBattingShot(shotKeyMap[e.code]);
       }
     });
+
+    // Clicking canvas during cinematic intro skips straight to match
+    if (this.canvas) {
+      this.canvas.addEventListener('click', () => {
+        soundManager.init();
+        if (this.cameraManager && this.cameraManager.currentMode === CAMERA_MODES.CINEMATIC_INTRO) {
+          this.cameraManager.skipIntro();
+        }
+      });
+    }
   }
 
   handleSpacePress() {
+    // If cinematic stadium intro is active, space skips it immediately to start match
+    if (this.cameraManager && this.cameraManager.currentMode === CAMERA_MODES.CINEMATIC_INTRO) {
+      this.cameraManager.skipIntro();
+      return;
+    }
+
     const s = this.gameState.currentState;
 
     // Respect paused and inactive states

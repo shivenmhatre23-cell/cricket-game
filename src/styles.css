@@ -904,3 +904,104 @@ kbd {
   display: none !important;
 }
 
+/* --- STADIUM CINEMATIC INTRO BANNER --- */
+.stadium-intro-banner {
+  pointer-events: auto;
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(8, 14, 28, 0.94);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 171, 0, 0.55);
+  border-radius: 16px;
+  padding: 18px 36px;
+  text-align: center;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85), 0 0 30px rgba(255, 152, 0, 0.35);
+  z-index: 100;
+  cursor: pointer;
+  animation: introBannerSlideUp 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  min-width: 360px;
+  max-width: 90vw;
+}
+
+@keyframes introBannerSlideUp {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.stadium-intro-banner.fade-out {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
+  pointer-events: none;
+}
+
+.intro-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #e65100, #ff8f00);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  padding: 3px 12px;
+  border-radius: 20px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.intro-venue-name {
+  font-size: 1.85rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 16px rgba(255, 167, 38, 0.6);
+  margin-bottom: 4px;
+}
+
+.intro-venue-details {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #00e5ff;
+  letter-spacing: 0.6px;
+  margin-bottom: 8px;
+}
+
+.intro-pitch-info {
+  font-size: 0.80rem;
+  font-weight: 600;
+  color: #cfd8dc;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 4px 14px;
+  border-radius: 8px;
+  display: inline-block;
+  margin-bottom: 10px;
+}
+
+.intro-pitch-info span {
+  color: #ffd54f;
+  font-weight: 800;
+}
+
+.intro-skip-hint {
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #90caf9;
+  letter-spacing: 1px;
+}
+
+.intro-skip-hint kbd {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: #ffffff;
+}
+
+
