@@ -61,6 +61,7 @@ export class CricketRulesEngine {
 
     // Deduplication set to strictly prevent duplicate scoring
     this.processedDeliveries = new Set();
+    this.isMatchOver = false;
 
     // Roster Stats
     this.innings1Card = null;
@@ -105,6 +106,10 @@ export class CricketRulesEngine {
 
   // Pure delivery processor
   processDelivery(delivery) {
+    if (this.isMatchOver) {
+      return { success: false, matchOver: true, reason: 'Match is already completed' };
+    }
+
     if (!delivery || !delivery.deliveryId) {
       return { success: false, reason: 'Invalid delivery or missing deliveryId' };
     }
@@ -263,6 +268,7 @@ export class CricketRulesEngine {
 
     // 1. Target chased in 2nd innings
     if (this.currentInningsNumber === 2 && this.target !== null && this.runs >= this.target) {
+      this.isMatchOver = true;
       const matchResult = this.finalizeMatch();
       return {
         success: true,
@@ -378,6 +384,7 @@ export class CricketRulesEngine {
       };
     } else {
       // Innings 2 ended -> Match Finished
+      this.isMatchOver = true;
       this.innings2Card = this.generateInningsScorecardSnapshot();
       const matchResult = this.finalizeMatch();
       return {

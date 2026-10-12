@@ -210,6 +210,14 @@ class CricketGame {
   }
 
   rebowlDelivery() {
+    const s = this.gameState.currentState;
+    if (s === GAME_STATES.PAUSED ||
+        s === GAME_STATES.MATCH_OVER ||
+        s === GAME_STATES.INNINGS_BREAK ||
+        s === GAME_STATES.MENU ||
+        s === GAME_STATES.TOSS) {
+      return;
+    }
     this.hideStadiumIntroBanner();
     this.cameraManager.skipIntro();
     this.resetDeliveryState();
@@ -279,8 +287,12 @@ class CricketGame {
 
   // Unified shot selection path for keyboard hotkeys and HUD button clicks
   selectBattingShot(shotKey) {
-    if (this.gameState.currentState === GAME_STATES.PAUSED ||
-        this.gameState.currentState === GAME_STATES.MATCH_OVER) {
+    const s = this.gameState.currentState;
+    if (s === GAME_STATES.PAUSED ||
+        s === GAME_STATES.MATCH_OVER ||
+        s === GAME_STATES.INNINGS_BREAK ||
+        s === GAME_STATES.MENU ||
+        s === GAME_STATES.TOSS) {
       return;
     }
     if (BATTING_SHOTS[shotKey]) {
@@ -295,7 +307,13 @@ class CricketGame {
       this.hud.updateCameraLabel(this.cameraManager.getModeName());
       soundManager.playClick();
     } else if (action === 'TOGGLE_PAUSE') {
-      if (this.gameState.currentState === GAME_STATES.PAUSED) {
+      const s = this.gameState.currentState;
+      if (s === GAME_STATES.MATCH_OVER ||
+          s === GAME_STATES.MENU ||
+          s === GAME_STATES.TOSS) {
+        return;
+      }
+      if (s === GAME_STATES.PAUSED) {
         this.gameState.setState(this.gameState.previousState);
         this.menuManager.hideModal();
       } else {
@@ -540,6 +558,10 @@ class CricketGame {
   }
 
   onDeliveryResult(result) {
+    if (this.lastTimingQuality && !result.timingQuality) {
+      result.timingQuality = this.lastTimingQuality;
+    }
+
     if (this.isPracticeMode) {
       this.practiceStats.ballsFaced++;
       const runs = result.runs || 0;

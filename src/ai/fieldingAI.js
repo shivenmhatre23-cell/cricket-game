@@ -110,7 +110,8 @@ export class FieldingAI {
 
   // Update fielders chasing ball
   update(delta, ball, characters, difficulty = 'MEDIUM', onFielderAction) {
-    if (!ball || !ball.hasHitBat || ball.isDead) return;
+    if (!ball || !ball.hasHitBat) return;
+    if (ball.isDead && !this.isThrowing) return;
 
     // 1. Reaction Delay Countdown
     if (!this.hasReacted) {

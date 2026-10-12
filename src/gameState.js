@@ -325,6 +325,9 @@ export class GameState {
     if (res.matchOver) {
       this.setState(GAME_STATES.MATCH_OVER);
     } else if (res.inningsBreak) {
+      if (this.bowlingAI && typeof this.bowlingAI.reset === 'function') {
+        this.bowlingAI.reset();
+      }
       this.setState(GAME_STATES.INNINGS_BREAK);
     } else if (res.overComplete) {
       this.setState(GAME_STATES.OVER_CHANGE);
