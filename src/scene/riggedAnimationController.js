@@ -16,11 +16,15 @@ export class RiggedAnimationController {
     this.player = playerObj;
     this.bones = playerObj?.riggedBones || {};
     this.restRotations = new Map();
+    this.boneEntries = [];
 
     // Cache initial bind-pose rotations for all discovered bones
     for (const [name, bone] of Object.entries(this.bones)) {
       if (bone && bone.isBone) {
-        this.restRotations.set(name, bone.rotation.clone());
+        const restRot = bone.userData?.initialRot ? bone.userData.initialRot.clone() : bone.rotation.clone();
+        this.restRotations.set(name, restRot);
+        bone.userData.restRot = restRot;
+        this.boneEntries.push({ name, bone, rest: restRot });
       }
     }
 
@@ -58,20 +62,21 @@ export class RiggedAnimationController {
     this.rightFoot = this.bones['RightFoot_064'];
   }
 
-  // Safely apply Euler offset relative to the cached rest pose
+  // Safely apply Euler offset relative to the cached rest pose (zero-allocation direct lookup)
   applyOffset(bone, dx = 0, dy = 0, dz = 0) {
     if (!bone) return;
-    const rest = this.restRotations.get(bone.name);
+    const rest = bone.userData?.restRot || this.restRotations.get(bone.name);
     if (!rest) return;
     bone.rotation.set(rest.x + dx, rest.y + dy, rest.z + dz);
   }
 
-  // Reset all bones to rest pose
+  // Reset all bones to rest pose (fast array loop without Object.entries allocations)
   resetToRest() {
-    for (const [name, bone] of Object.entries(this.bones)) {
-      const rest = this.restRotations.get(name);
-      if (bone && rest) {
-        bone.rotation.set(rest.x, rest.y, rest.z);
+    const entries = this.boneEntries;
+    for (let i = 0, l = entries.length; i < l; i++) {
+      const entry = entries[i];
+      if (entry.bone && entry.rest) {
+        entry.bone.rotation.set(entry.rest.x, entry.rest.y, entry.rest.z);
       }
     }
     this.activeAnimation = null;
@@ -81,6 +86,9 @@ export class RiggedAnimationController {
 
   // Apply stance pose to the skeletal rig
   applyStance(stanceType) {
+    if (this.currentStance === stanceType && !this.isPlaying && !this.activeAnimation) {
+      return;
+    }
     this.currentStance = stanceType;
     this.resetToRest();
 

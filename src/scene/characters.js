@@ -1717,8 +1717,22 @@ export class CharacterManager {
             // Normalize shadows and cache source model for safe per-player cloning
             externalModel.traverse((child) => {
               if (child.isMesh) {
-                child.castShadow = true;
-                child.receiveShadow = true;
+                const matName = child.material?.name || '';
+                const objName = child.name || '';
+                // Minor interior meshes: Teeth are inside the mouth cavity and never visible
+                if (matName.includes('Teeth') || objName.includes('Teeth')) {
+                  child.visible = false;
+                  child.castShadow = false;
+                  child.receiveShadow = false;
+                } else if (matName.includes('Eye') || objName.includes('Eye') || matName.includes('Glasses') || objName.includes('Glasses')) {
+                  // Eyes and glasses are visible on face but excluded from shadow passes
+                  child.castShadow = false;
+                  child.receiveShadow = false;
+                } else {
+                  // Visible silhouette (torso, pants, body skin, hair, head skin, footwear)
+                  child.castShadow = true;
+                  child.receiveShadow = true;
+                }
               }
             });
 
@@ -1765,11 +1779,19 @@ export class CharacterManager {
         }
       }
       if (child.isMesh) {
-        // Targeted optimization: disable shadow pass for minor interior meshes (teeth, eyes, glasses)
-        if (child.name?.includes('Teeth') || child.name?.includes('Eye') || child.name?.includes('Glasses')) {
+        const matName = child.material?.name || '';
+        const objName = child.name || '';
+        // Minor interior meshes: Teeth are inside the mouth cavity and never visible
+        if (matName.includes('Teeth') || objName.includes('Teeth')) {
+          child.visible = false;
+          child.castShadow = false;
+          child.receiveShadow = false;
+        } else if (matName.includes('Eye') || objName.includes('Eye') || matName.includes('Glasses') || objName.includes('Glasses')) {
+          // Eyes and glasses are visible on face but excluded from shadow passes
           child.castShadow = false;
           child.receiveShadow = false;
         } else {
+          // Visible silhouette (torso, pants, body skin, hair, head skin, footwear)
           child.castShadow = true;
           child.receiveShadow = true;
         }
@@ -1801,14 +1823,20 @@ export class CharacterManager {
       }
     }
 
-    // Attach Batting / Keeper Pads to leg bones
+    // Attach Batting / Keeper Pads to leg bones (shared cached material per team kit color)
     if (playerObj.isBatsman || playerObj.isKeeper) {
       const leftShin = bonesMap['LeftLeg_058'];
       const rightShin = bonesMap['RightLeg_063'];
       const kitPads = playerObj.userData?.team?.kit?.pads;
-      const padMat = kitPads
-        ? new THREE.MeshStandardMaterial({ color: new THREE.Color(kitPads), roughness: 0.55 })
-        : this.sharedMaterials.pad;
+      if (!this.padMaterialCache) this.padMaterialCache = new Map();
+      const padKey = kitPads || 'DEFAULT';
+      let padMat = this.padMaterialCache.get(padKey);
+      if (!padMat) {
+        padMat = kitPads
+          ? new THREE.MeshStandardMaterial({ color: new THREE.Color(kitPads), roughness: 0.55 })
+          : this.sharedMaterials.pad;
+        this.padMaterialCache.set(padKey, padMat);
+      }
 
       playerObj.riggedPads = [];
       if (leftShin) {
@@ -1834,6 +1862,8 @@ export class CharacterManager {
       const badgeMesh = new THREE.Mesh(GEOMETRY_CACHE.jerseyBadge, badgeMat);
       badgeMesh.position.set(0, 0.02, -0.115);
       badgeMesh.rotation.y = Math.PI; // Face outwards toward the back
+      badgeMesh.castShadow = false;
+      badgeMesh.receiveShadow = false;
       spineBone.add(badgeMesh);
       playerObj.riggedJerseyBadge = badgeMesh;
     }
@@ -1886,17 +1916,23 @@ export class CharacterManager {
         // Wolf3D_Outfit_Top (Jersey / Shirt)
         if (child.material.name === 'Wolf3D_Outfit_Top' || child.name?.includes('Outfit_Top')) {
           if (!isIndia && teamKit?.primary) {
-            if (!child.userData.customMat) {
-              child.userData.originalMat = child.material;
-              child.userData.customMat = new THREE.MeshStandardMaterial({
+            if (!this.teamRiggedMaterialCache) this.teamRiggedMaterialCache = new Map();
+            const topKey = (teamData?.code || teamData?.name || 'CUSTOM') + '_TOP_' + teamKit.primary;
+            let customMat = this.teamRiggedMaterialCache.get(topKey);
+            if (!customMat) {
+              customMat = new THREE.MeshStandardMaterial({
                 color: new THREE.Color(teamKit.primary),
                 roughness: 0.7,
                 metalness: 0.05
               });
-            } else {
-              child.userData.customMat.color.set(teamKit.primary);
+              this.teamRiggedMaterialCache.set(topKey, customMat);
             }
-            child.material = child.userData.customMat;
+            if (!child.userData.originalMat) {
+              child.userData.originalMat = child.material;
+            }
+            child.userData.customMat = customMat;
+            child.userData.isSharedMat = true;
+            child.material = customMat;
           } else if (child.userData.originalMat) {
             child.material = child.userData.originalMat;
           }
@@ -1905,16 +1941,22 @@ export class CharacterManager {
         // Wolf3D_Outfit_Bottom (Trousers / Pants)
         if (child.material.name === 'Wolf3D_Outfit_Bottom' || child.name?.includes('Outfit_Bottom')) {
           if (!isIndia && teamKit?.pants) {
-            if (!child.userData.customMat) {
-              child.userData.originalMat = child.material;
-              child.userData.customMat = new THREE.MeshStandardMaterial({
+            if (!this.teamRiggedMaterialCache) this.teamRiggedMaterialCache = new Map();
+            const bottomKey = (teamData?.code || teamData?.name || 'CUSTOM') + '_BTM_' + teamKit.pants;
+            let customMat = this.teamRiggedMaterialCache.get(bottomKey);
+            if (!customMat) {
+              customMat = new THREE.MeshStandardMaterial({
                 color: new THREE.Color(teamKit.pants),
                 roughness: 0.85
               });
-            } else {
-              child.userData.customMat.color.set(teamKit.pants);
+              this.teamRiggedMaterialCache.set(bottomKey, customMat);
             }
-            child.material = child.userData.customMat;
+            if (!child.userData.originalMat) {
+              child.userData.originalMat = child.material;
+            }
+            child.userData.customMat = customMat;
+            child.userData.isSharedMat = true;
+            child.material = customMat;
           } else if (child.userData.originalMat) {
             child.material = child.userData.originalMat;
           }
@@ -1933,12 +1975,17 @@ export class CharacterManager {
       playerObj.riggedJerseyBadge.material = createJerseyBackBadge(playerData, teamData);
     }
 
-    // Update pad colors if present
+    // Update pad colors if present (shared cached material per team kit color)
     if (playerObj.riggedPads && playerObj.riggedPads.length > 0 && teamKit?.pads) {
-      const padMat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(teamKit.pads),
-        roughness: 0.55
-      });
+      if (!this.padMaterialCache) this.padMaterialCache = new Map();
+      let padMat = this.padMaterialCache.get(teamKit.pads);
+      if (!padMat) {
+        padMat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(teamKit.pads),
+          roughness: 0.55
+        });
+        this.padMaterialCache.set(teamKit.pads, padMat);
+      }
       playerObj.riggedPads.forEach(p => {
         if (p) p.material = padMat;
       });
@@ -1953,7 +2000,7 @@ export class CharacterManager {
     }
   }
 
-  // Dispose per-instance cloned materials and generated badge textures cleanly
+  // Dispose per-instance cloned materials and generated badge textures cleanly (preserving shared team materials)
   disposePlayerRiggedModel(playerObj) {
     if (!playerObj || !playerObj.riggedModel) return;
 
@@ -1973,7 +2020,7 @@ export class CharacterManager {
     }
 
     playerObj.riggedModel.traverse((child) => {
-      if (child.isMesh && child.userData.customMat) {
+      if (child.isMesh && child.userData.customMat && !child.userData.isSharedMat) {
         child.userData.customMat.dispose();
         child.userData.customMat = null;
       }
