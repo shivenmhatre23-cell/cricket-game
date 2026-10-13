@@ -71,6 +71,8 @@ describe('Phase 13.6: Full-Match Gameplay Integration & Stability Test Suite', (
     const characters = new CharacterManager(scene);
 
     const delData = gameState.generateDelivery();
+    delData.lineOffset = 0.45; // Deterministic 4th stump corridor outside off
+    delData.swing = 0;
     ball.setupDelivery(delData);
     ball.deliverBall(new THREE.Vector3(0.4, 2.1, -10.06));
 

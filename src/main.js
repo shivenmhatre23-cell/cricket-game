@@ -633,6 +633,10 @@ class CricketGame {
       soundManager.setSfxVolume(settings.sfxVolume);
     }
 
+    if (settings.characterModel && this.characters && typeof this.characters.setModelMode === 'function') {
+      this.characters.setModelMode(settings.characterModel);
+    }
+
     if (settings.isNightMode) {
       this.scene.background.setHex(0x060c18);
       this.scene.fog = new THREE.FogExp2(0x081020, 0.0045);
@@ -778,5 +782,5 @@ class CricketGame {
 
 // Instantiate and launch game
 window.addEventListener('DOMContentLoaded', () => {
-  new CricketGame();
+  window.__cricketGame = new CricketGame();
 });

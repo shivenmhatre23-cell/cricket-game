@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 // Procedural Face Material Generator with distinct facial features, complexion, and beards
 export function createFaceMaterial(playerData) {
@@ -392,6 +393,73 @@ export function createJerseyMaterials(playerData, teamData) {
   return [sideMat, sideMat, capMat, capMat, frontMat, backMat];
 }
 
+// Crisp Jersey Back Badge with Player Surname & Large 2-digit Number for Rigged Humanoid Model
+export function createJerseyBackBadge(playerData, teamData) {
+  const kit = teamData?.kit || {
+    primary: teamData?.color || '#1565c0',
+    secondary: '#ff6f00',
+    accent: '#0d47a1',
+    text: '#ffffff'
+  };
+
+  const playerName = playerData?.name
+    ? playerData.name.replace(/\s*\(C\)|\s*\(WK\)/gi, '').split('. ').pop()?.toUpperCase() || 'PLAYER'
+    : 'LEGEND';
+  const playerNumber = playerData?.number !== undefined ? String(playerData.number) : '07';
+
+  if (typeof document === 'undefined') {
+    return new THREE.MeshStandardMaterial({
+      color: new THREE.Color(kit.primary),
+      roughness: 0.65
+    });
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  // Background in team kit primary color
+  ctx.fillStyle = kit.primary;
+  ctx.fillRect(0, 0, 256, 256);
+
+  // Border & trim in secondary accent color
+  ctx.strokeStyle = kit.secondary;
+  ctx.lineWidth = 10;
+  ctx.strokeRect(6, 6, 244, 244);
+
+  // Top header bar
+  ctx.fillStyle = kit.secondary;
+  ctx.fillRect(0, 0, 256, 20);
+
+  // Player Surname
+  ctx.fillStyle = kit.text || '#ffffff';
+  ctx.font = 'bold 36px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+  ctx.shadowBlur = 4;
+  ctx.fillText(playerName, 128, 64);
+
+  // Big 2-digit Jersey Number
+  ctx.font = '900 120px "Segoe UI", Arial, sans-serif';
+  ctx.shadowBlur = 6;
+  ctx.fillText(playerNumber, 128, 165);
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+  ctx.strokeText(playerNumber, 128, 165);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return new THREE.MeshStandardMaterial({
+    map: texture,
+    roughness: 0.65,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1
+  });
+}
+
 // Shared Geometries Cache to optimize memory and draw calls across all players
 const GEOMETRY_CACHE = {
   torso: new THREE.BoxGeometry(0.44, 0.56, 0.26),
@@ -442,6 +510,12 @@ export class CharacterManager {
     this.umpire = null;
     this.keeper = null;
     this.fielders = [];
+
+    // Optional Character Model System: 'PROCEDURAL' (default) or 'RIGGED_GLB'
+    this.modelMode = 'PROCEDURAL';
+    this.cachedExternalModel = null;
+    this.isExternalModelLoading = false;
+    this.externalModelLoadError = null;
 
     // Shared base materials
     this.sharedMaterials = {
@@ -918,6 +992,7 @@ export class CharacterManager {
     if (b.bat) {
       this.safeRot(b.bat, 0.35, 0, -0.15);
     }
+    this.applyRiggedStance(b, 'BATSMAN_STANCE');
   }
 
   setNonStrikerStance() {
@@ -929,6 +1004,7 @@ export class CharacterManager {
     if (ns.bat) {
       this.safeRot(ns.bat, 0.8, 0, 0);
     }
+    this.applyRiggedStance(ns, 'NON_STRIKER_STANCE');
   }
 
   setBowlerReadyStance() {
@@ -944,6 +1020,7 @@ export class CharacterManager {
     this.safeRot(bw.leftArm?.elbow, -0.3, 0, 0);
     this.safeRot(bw.rightArm?.shoulder, 0.2, 0, 0);
     this.safeRot(bw.rightArm?.elbow, -0.3, 0, 0);
+    this.applyRiggedStance(bw, 'BOWLER_READY');
   }
 
   setKeeperStance() {
@@ -958,6 +1035,7 @@ export class CharacterManager {
     this.safeRot(k.rightArm?.shoulder, 0.5, 0, 0.2);
     this.safeRot(k.leftArm?.elbow, -0.6, 0, 0);
     this.safeRot(k.rightArm?.elbow, -0.6, 0, 0);
+    this.applyRiggedStance(k, 'KEEPER_CROUCH');
   }
 
   setFielderStance(fielder) {
@@ -972,6 +1050,7 @@ export class CharacterManager {
     this.safeRot(fielder.rightArm?.shoulder, 0.4, 0, 0.1);
     this.safeRot(fielder.leftArm?.elbow, -0.3, 0, 0);
     this.safeRot(fielder.rightArm?.elbow, -0.3, 0, 0);
+    this.applyRiggedStance(fielder, 'FIELDER_READY');
   }
 
   // Smooth running stride articulation for chasing fielders
@@ -1336,39 +1415,384 @@ export class CharacterManager {
     }
   }
 
-  // Load external Sketchfab 3D Player Model (Indian Cricket Player Rigged) if present
+  // Model Mode Selection: 'PROCEDURAL' (default) or 'RIGGED_GLB'
+  setModelMode(mode) {
+    const targetMode = mode === 'RIGGED_GLB' ? 'RIGGED_GLB' : 'PROCEDURAL';
+    this.modelMode = targetMode;
+
+    const wrappers = this.getAllPlayerWrappers();
+    wrappers.forEach(p => {
+      if (this.modelMode === 'RIGGED_GLB') {
+        if (!p.riggedModel && this.cachedExternalModel) {
+          this.attachRiggedModelToPlayer(p);
+        }
+        if (p.riggedModel) {
+          if (p.hips) p.hips.visible = false;
+          p.riggedModel.visible = true;
+        } else if (p.hips) {
+          p.hips.visible = true; // Fallback to procedural while loading or on error
+        }
+      } else {
+        if (p.hips) p.hips.visible = true;
+        if (p.riggedModel) p.riggedModel.visible = false;
+      }
+    });
+
+    return this.modelMode;
+  }
+
+  getModelMode() {
+    return this.modelMode;
+  }
+
+  // Get all active player wrapper objects (batter, nonStriker, bowler, keeper, fielders)
+  getAllPlayerWrappers() {
+    const list = [];
+    if (this.batter) list.push(this.batter);
+    if (this.nonStriker) list.push(this.nonStriker);
+    if (this.bowler) list.push(this.bowler);
+    if (this.keeper) list.push(this.keeper);
+    if (Array.isArray(this.fielders)) {
+      list.push(...this.fielders);
+    }
+    return list;
+  }
+
+  // Asynchronously load external Sketchfab 3D Player Model (Indian Cricket Player Rigged) without blocking startup
   loadExternalPlayerModel() {
     if (typeof window === 'undefined' || typeof document === 'undefined' || !this.scene) return;
 
+    this.isExternalModelLoading = true;
+    this.externalModelLoadError = null;
+
     try {
       const loader = new GLTFLoader();
-      const modelCandidates = ['/models/indian_cricket_player.glb', '/models/player.glb'];
+      const modelCandidates = [
+        '/models/indian_cricket_player.glb',
+        '/models/indian_cricket_player_rigged.glb',
+        '/models/player.glb'
+      ];
 
       const tryLoadCandidate = (index) => {
-        if (index >= modelCandidates.length) return;
+        if (index >= modelCandidates.length) {
+          this.isExternalModelLoading = false;
+          return;
+        }
+
         loader.load(
           modelCandidates[index],
           (gltf) => {
+            this.isExternalModelLoading = false;
             const externalModel = gltf.scene;
+
+            // Normalize shadows and cache source model for safe per-player cloning
             externalModel.traverse((child) => {
               if (child.isMesh) {
                 child.castShadow = true;
                 child.receiveShadow = true;
               }
             });
-            this.externalPlayerModel = externalModel;
+
+            this.cachedExternalModel = externalModel;
+            this.attachRiggedModelToAll();
+
+            // If user or settings already opted into RIGGED_GLB mode, activate visibility
+            if (this.modelMode === 'RIGGED_GLB') {
+              this.setModelMode('RIGGED_GLB');
+            }
           },
           undefined,
-          () => {
+          (err) => {
+            this.externalModelLoadError = err;
             tryLoadCandidate(index + 1);
           }
         );
       };
 
       tryLoadCandidate(0);
-    } catch {
-      // Graceful fallback to procedural player models
+    } catch (err) {
+      this.isExternalModelLoading = false;
+      this.externalModelLoadError = err;
+      // Retain procedural characters on any loader error
     }
+  }
+
+  // Attach an independent, safely cloned rigged model instance to a player wrapper
+  attachRiggedModelToPlayer(playerObj) {
+    if (!playerObj || !this.cachedExternalModel) return null;
+    if (playerObj.riggedModel) return playerObj.riggedModel;
+
+    // Clone safely using SkeletonUtils to ensure each player has an independent skeleton and bone hierarchy
+    const cloned = typeof cloneSkeleton === 'function'
+      ? cloneSkeleton(this.cachedExternalModel)
+      : this.cachedExternalModel.clone(true);
+
+    const bonesMap = {};
+    cloned.traverse((child) => {
+      if (child.isBone) {
+        bonesMap[child.name] = child;
+        if (!child.userData.initialRot) {
+          child.userData.initialRot = child.rotation.clone();
+        }
+      }
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
+    playerObj.riggedBones = bonesMap;
+    playerObj.riggedModel = cloned;
+
+    // Attach Batsman Bat to Right Hand bone if character is a batsman
+    if (playerObj.isBatsman) {
+      const rightHandBone = bonesMap['RightHand_036'] || bonesMap['RightForeArm_035'];
+      if (rightHandBone) {
+        const batGroup = new THREE.Group();
+        const blade = new THREE.Mesh(GEOMETRY_CACHE.batBlade, this.sharedMaterials.batWood);
+        blade.castShadow = true;
+        batGroup.add(blade);
+        const spine = new THREE.Mesh(GEOMETRY_CACHE.batSpine, this.sharedMaterials.batWood);
+        blade.add(spine);
+        const handle = new THREE.Mesh(GEOMETRY_CACHE.batHandle, this.sharedMaterials.batGrip);
+        handle.castShadow = true;
+        batGroup.add(handle);
+
+        batGroup.position.set(0, -0.06, 0.05);
+        batGroup.rotation.x = Math.PI * 0.15;
+        rightHandBone.add(batGroup);
+        playerObj.riggedBat = batGroup;
+      }
+    }
+
+    // Attach Batting / Keeper Pads to leg bones
+    if (playerObj.isBatsman || playerObj.isKeeper) {
+      const leftShin = bonesMap['LeftLeg_058'];
+      const rightShin = bonesMap['RightLeg_063'];
+      const kitPads = playerObj.userData?.team?.kit?.pads;
+      const padMat = kitPads
+        ? new THREE.MeshStandardMaterial({ color: new THREE.Color(kitPads), roughness: 0.55 })
+        : this.sharedMaterials.pad;
+
+      playerObj.riggedPads = [];
+      if (leftShin) {
+        const padL = new THREE.Mesh(GEOMETRY_CACHE.pad, padMat);
+        padL.position.set(0, -0.2, 0.07);
+        padL.castShadow = true;
+        leftShin.add(padL);
+        playerObj.riggedPads.push(padL);
+      }
+      if (rightShin) {
+        const padR = new THREE.Mesh(GEOMETRY_CACHE.pad, padMat);
+        padR.position.set(0, -0.2, 0.07);
+        padR.castShadow = true;
+        rightShin.add(padR);
+        playerObj.riggedPads.push(padR);
+      }
+    }
+
+    // Attach Jersey Back Badge (Player surname & 2-digit number) to Spine2_04 bone
+    const spineBone = bonesMap['Spine2_04'] || bonesMap['Spine1_03'];
+    if (spineBone) {
+      const badgeGeom = new THREE.PlaneGeometry(0.24, 0.28);
+      const badgeMat = createJerseyBackBadge(playerObj.userData?.player, playerObj.userData?.team);
+      const badgeMesh = new THREE.Mesh(badgeGeom, badgeMat);
+      badgeMesh.position.set(0, 0.02, -0.115);
+      badgeMesh.rotation.y = Math.PI; // Face outwards toward the back
+      spineBone.add(badgeMesh);
+      playerObj.riggedJerseyBadge = badgeMesh;
+    }
+
+    // Add to player's main world group (shares position, orientation, and physics anchor)
+    playerObj.group.add(cloned);
+
+    // Apply team kit appearance
+    this.applyRiggedPlayerAppearance(playerObj, playerObj.userData?.player, playerObj.userData?.team);
+
+    // Set initial visibility according to current model mode
+    cloned.visible = (this.modelMode === 'RIGGED_GLB');
+    if (this.modelMode === 'RIGGED_GLB' && playerObj.hips) {
+      playerObj.hips.visible = false;
+    }
+
+    return cloned;
+  }
+
+  // Attach rigged model to all active players when asset finishes loading
+  attachRiggedModelToAll() {
+    const wrappers = this.getAllPlayerWrappers();
+    wrappers.forEach(p => {
+      this.attachRiggedModelToPlayer(p);
+    });
+  }
+
+  // Apply appearance, team colors, and jersey badge to the rigged model instance
+  applyRiggedPlayerAppearance(playerObj, playerData, teamData) {
+    if (!playerObj || !playerObj.riggedModel) return;
+
+    const teamKit = teamData?.kit;
+    const isIndia = teamData?.name === 'India' || teamData?.code === 'IND';
+
+    playerObj.riggedModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        // Wolf3D_Outfit_Top (Jersey / Shirt)
+        if (child.material.name === 'Wolf3D_Outfit_Top' || child.name?.includes('Outfit_Top')) {
+          if (!isIndia && teamKit?.primary) {
+            if (!child.userData.customMat) {
+              child.userData.originalMat = child.material;
+              child.userData.customMat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(teamKit.primary),
+                roughness: 0.7,
+                metalness: 0.05
+              });
+            } else {
+              child.userData.customMat.color.set(teamKit.primary);
+            }
+            child.material = child.userData.customMat;
+          } else if (child.userData.originalMat) {
+            child.material = child.userData.originalMat;
+          }
+        }
+
+        // Wolf3D_Outfit_Bottom (Trousers / Pants)
+        if (child.material.name === 'Wolf3D_Outfit_Bottom' || child.name?.includes('Outfit_Bottom')) {
+          if (!isIndia && teamKit?.pants) {
+            if (!child.userData.customMat) {
+              child.userData.originalMat = child.material;
+              child.userData.customMat = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(teamKit.pants),
+                roughness: 0.85
+              });
+            } else {
+              child.userData.customMat.color.set(teamKit.pants);
+            }
+            child.material = child.userData.customMat;
+          } else if (child.userData.originalMat) {
+            child.material = child.userData.originalMat;
+          }
+        }
+      }
+    });
+
+    // Update jersey back badge with live player data & team colors
+    if (playerObj.riggedJerseyBadge) {
+      if (playerObj.riggedJerseyBadge.material?.map) {
+        playerObj.riggedJerseyBadge.material.map.dispose();
+      }
+      if (playerObj.riggedJerseyBadge.material) {
+        playerObj.riggedJerseyBadge.material.dispose();
+      }
+      playerObj.riggedJerseyBadge.material = createJerseyBackBadge(playerData, teamData);
+    }
+
+    // Update pad colors if present
+    if (playerObj.riggedPads && playerObj.riggedPads.length > 0 && teamKit?.pads) {
+      const padMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(teamKit.pads),
+        roughness: 0.55
+      });
+      playerObj.riggedPads.forEach(p => {
+        if (p) p.material = padMat;
+      });
+    }
+  }
+
+  // Safe animation adapter: applies subtle, stable stance offsets to the 83-bone rig without corrupting bind pose
+  applyRiggedStance(playerObj, stanceType) {
+    if (!playerObj || !playerObj.riggedBones) return;
+
+    const bones = playerObj.riggedBones;
+    const applyOffset = (bone, dx = 0, dy = 0, dz = 0) => {
+      if (!bone) return;
+      if (!bone.userData.initialRot) {
+        bone.userData.initialRot = bone.rotation.clone();
+      }
+      const init = bone.userData.initialRot;
+      bone.rotation.x = init.x + dx;
+      bone.rotation.y = init.y + dy;
+      bone.rotation.z = init.z + dz;
+    };
+
+    const leftLeg = bones['LeftUpLeg_057'];
+    const leftKnee = bones['LeftLeg_058'];
+    const rightLeg = bones['RightUpLeg_062'];
+    const rightKnee = bones['RightLeg_063'];
+    const leftArm = bones['LeftArm_011'];
+    const leftForearm = bones['LeftForeArm_012'];
+    const rightArm = bones['RightArm_034'];
+    const rightForearm = bones['RightForeArm_035'];
+    const spine = bones['Spine_02'];
+
+    if (stanceType === 'BATSMAN_STANCE') {
+      applyOffset(leftLeg, -0.15, 0, 0.05);
+      applyOffset(leftKnee, 0.25, 0, 0);
+      applyOffset(rightLeg, -0.1, 0, -0.05);
+      applyOffset(rightKnee, 0.2, 0, 0);
+      applyOffset(leftArm, 0.4, 0, -0.2);
+      applyOffset(leftForearm, -0.3, 0, 0);
+      applyOffset(rightArm, 0.45, 0, 0.15);
+      applyOffset(rightForearm, -0.3, 0, 0);
+      applyOffset(spine, 0, -0.2, 0);
+    } else if (stanceType === 'NON_STRIKER_STANCE') {
+      applyOffset(leftArm, 0.2, 0, 0);
+      applyOffset(rightArm, 0.2, 0, 0);
+    } else if (stanceType === 'BOWLER_READY') {
+      // Balanced upright stance
+      applyOffset(leftLeg, 0, 0, 0);
+      applyOffset(leftKnee, 0, 0, 0);
+      applyOffset(rightLeg, 0, 0, 0);
+      applyOffset(rightKnee, 0, 0, 0);
+      applyOffset(leftArm, 0.1, 0, 0);
+      applyOffset(rightArm, 0.1, 0, 0);
+      applyOffset(spine, 0, 0, 0);
+    } else if (stanceType === 'KEEPER_CROUCH') {
+      applyOffset(leftLeg, -0.4, 0, 0.15);
+      applyOffset(leftKnee, 0.65, 0, 0);
+      applyOffset(rightLeg, -0.4, 0, -0.15);
+      applyOffset(rightKnee, 0.65, 0, 0);
+      applyOffset(leftArm, 0.35, 0, -0.2);
+      applyOffset(rightArm, 0.35, 0, 0.2);
+      applyOffset(spine, 0.15, 0, 0);
+    } else if (stanceType === 'FIELDER_READY') {
+      applyOffset(leftLeg, -0.2, 0, 0.05);
+      applyOffset(leftKnee, 0.3, 0, 0);
+      applyOffset(rightLeg, -0.2, 0, -0.05);
+      applyOffset(rightKnee, 0.3, 0, 0);
+      applyOffset(leftArm, 0.25, 0, -0.1);
+      applyOffset(rightArm, 0.25, 0, 0.1);
+      applyOffset(spine, 0.08, 0, 0);
+    }
+  }
+
+  // Dispose per-instance cloned materials and generated badge textures cleanly
+  disposePlayerRiggedModel(playerObj) {
+    if (!playerObj || !playerObj.riggedModel) return;
+
+    if (playerObj.riggedJerseyBadge) {
+      if (playerObj.riggedJerseyBadge.material?.map) {
+        playerObj.riggedJerseyBadge.material.map.dispose();
+      }
+      if (playerObj.riggedJerseyBadge.material) {
+        playerObj.riggedJerseyBadge.material.dispose();
+      }
+      if (playerObj.riggedJerseyBadge.geometry) {
+        playerObj.riggedJerseyBadge.geometry.dispose();
+      }
+      playerObj.riggedJerseyBadge = null;
+    }
+
+    playerObj.riggedModel.traverse((child) => {
+      if (child.isMesh && child.userData.customMat) {
+        child.userData.customMat.dispose();
+        child.userData.customMat = null;
+      }
+    });
+
+    if (playerObj.group && playerObj.riggedModel) {
+      playerObj.group.remove(playerObj.riggedModel);
+    }
+    playerObj.riggedModel = null;
+    playerObj.riggedBones = null;
   }
 
   // Apply complete individual player identity: authentic name & big number jersey, custom face & beard, team kit
@@ -1377,6 +1801,11 @@ export class CharacterManager {
 
     playerObj.userData.player = playerData;
     playerObj.userData.team = teamData;
+
+    // Update rigged 3D model appearance if attached
+    if (playerObj.riggedModel) {
+      this.applyRiggedPlayerAppearance(playerObj, playerData, teamData);
+    }
 
     // 1. Update Torso Jersey Materials (Front country chest + Back name and big number)
     if (playerObj.torso) {

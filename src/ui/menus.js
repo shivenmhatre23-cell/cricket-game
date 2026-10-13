@@ -17,6 +17,7 @@ export class MenuManager {
       masterVolume: 1.0,
       sfxVolume: 1.0,
       graphicsQuality: 'HIGH', // 'HIGH', 'MEDIUM', 'LOW'
+      characterModel: 'PROCEDURAL', // 'PROCEDURAL' (default) or 'RIGGED_GLB'
       isNightMode: false
     };
 
@@ -425,6 +426,14 @@ export class MenuManager {
           </div>
 
           <div class="setting-item">
+            <label>Player Character Model</label>
+            <div class="options-row">
+              <button class="model-opt-btn ${this.settings.characterModel !== 'RIGGED_GLB' ? 'active' : ''}" data-model="PROCEDURAL">PROCEDURAL (HD KITS &amp; FACES)</button>
+              <button class="model-opt-btn ${this.settings.characterModel === 'RIGGED_GLB' ? 'active' : ''}" data-model="RIGGED_GLB">RIGGED 3D GLB (BETA)</button>
+            </div>
+          </div>
+
+          <div class="setting-item">
             <label>Match Difficulty</label>
             <div class="options-row">
               <button class="set-diff-btn ${this.gameState.difficulty === 'EASY' ? 'active' : ''}" data-diff="EASY">EASY</button>
@@ -463,6 +472,15 @@ export class MenuManager {
         this.overlay.querySelectorAll('.gfx-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.settings.graphicsQuality = btn.dataset.gfx;
+      });
+    });
+
+    this.overlay.querySelectorAll('.model-opt-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        soundManager.playClick();
+        this.overlay.querySelectorAll('.model-opt-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.settings.characterModel = btn.dataset.model;
       });
     });
 
