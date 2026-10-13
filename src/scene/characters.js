@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { RiggedAnimationController } from './riggedAnimationController.js';
 
 // Procedural Face Material Generator with distinct facial features, complexion, and beards
 export function createFaceMaterial(playerData) {
@@ -482,7 +483,8 @@ const GEOMETRY_CACHE = {
   bail: new THREE.CylinderGeometry(0.01, 0.01, 0.11, 8),
   hatBrim: new THREE.CylinderGeometry(0.24, 0.24, 0.02, 16),
   hatTop: new THREE.CylinderGeometry(0.14, 0.14, 0.12, 16),
-  grillRod: new THREE.CylinderGeometry(0.005, 0.005, 0.16, 6)
+  grillRod: new THREE.CylinderGeometry(0.005, 0.005, 0.16, 6),
+  jerseyBadge: new THREE.PlaneGeometry(0.24, 0.28)
 };
 
 // Adjust geometry anchor pivots for natural joint rotation
@@ -1108,7 +1110,14 @@ export class CharacterManager {
   // --- 5. Dynamic Bat Swing Animation for 6 Distinct Shots ---
   playBatSwing(progress, shotKey = 'STRAIGHT_DRIVE', shotAngle = Math.PI, timingQuality = null) {
     const b = this.batter;
-    if (!b || !b.bat) return;
+    if (!b) return;
+
+    // Dispatch to skeletal animation controller when rigged model is active
+    if (this.modelMode === 'RIGGED_GLB' && b.animController) {
+      b.animController.playBatSwing(progress, shotKey, shotAngle, timingQuality);
+    }
+
+    if (!b.bat) return;
 
     // Normalizing and clamping progress to [0, 1]
     const p = Math.max(0, Math.min(1, progress));
@@ -1210,6 +1219,11 @@ export class CharacterManager {
 
   // Calculate bat sweet spot world position for collision check
   getBatSweetSpot() {
+    if (this.modelMode === 'RIGGED_GLB' && this.batter?.riggedBat) {
+      const pos = new THREE.Vector3();
+      this.batter.riggedBat.getWorldPosition(pos);
+      return pos;
+    }
     if (!this.batter || !this.batter.bat) return new THREE.Vector3(0.1, 0.7, 9.15);
     const pos = new THREE.Vector3();
     this.batter.bat.getWorldPosition(pos);
@@ -1218,6 +1232,9 @@ export class CharacterManager {
 
   resetBatter() {
     this.setBatsmanStance();
+    if (this.batter?.animController) {
+      this.batter.animController.applyStance('BATSMAN_STANCE');
+    }
   }
 
   // --- 6. Dynamic Bowling Delivery Animation for 4 Distinct Bowling Styles ---
@@ -1236,6 +1253,19 @@ export class CharacterManager {
   }
 
   getBowlerHandPosition() {
+    // When rigged model is active, synchronize to the real skeletal bowling hand bone
+    if (this.modelMode === 'RIGGED_GLB' && this.bowler?.riggedBones) {
+      const handBone = this.bowler.riggedBones['RightHand_036'] || this.bowler.riggedBones['RightForeArm_035'];
+      if (handBone) {
+        const pos = new THREE.Vector3();
+        if (this.bowler.group && typeof this.bowler.group.updateMatrixWorld === 'function') {
+          this.bowler.group.updateMatrixWorld(true);
+        }
+        handBone.getWorldPosition(pos);
+        return pos;
+      }
+    }
+
     if (!this.bowler || !this.bowler.rightArm || !this.bowler.rightArm.glove) {
       return new THREE.Vector3(0.4, 2.1, -10.06);
     }
@@ -1254,6 +1284,11 @@ export class CharacterManager {
   playBowlerAction(progress, profileId = 'FAST_BOWLER') {
     const bw = this.bowler;
     if (!bw || !bw.group) return;
+
+    // Dispatch to skeletal animation controller when rigged model is active
+    if (this.modelMode === 'RIGGED_GLB' && bw.animController) {
+      bw.animController.playBowlingAction(progress, profileId);
+    }
 
     const p = Math.max(0, Math.min(1.0, progress));
     const startZ = this.getBowlerStartZ(profileId);
@@ -1536,13 +1571,20 @@ export class CharacterManager {
         }
       }
       if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+        // Targeted optimization: disable shadow pass for minor interior meshes (teeth, eyes, glasses)
+        if (child.name?.includes('Teeth') || child.name?.includes('Eye') || child.name?.includes('Glasses')) {
+          child.castShadow = false;
+          child.receiveShadow = false;
+        } else {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
       }
     });
 
     playerObj.riggedBones = bonesMap;
     playerObj.riggedModel = cloned;
+    playerObj.animController = new RiggedAnimationController(playerObj);
 
     // Attach Batsman Bat to Right Hand bone if character is a batsman
     if (playerObj.isBatsman) {
@@ -1591,12 +1633,11 @@ export class CharacterManager {
       }
     }
 
-    // Attach Jersey Back Badge (Player surname & 2-digit number) to Spine2_04 bone
+    // Attach Jersey Back Badge (Player surname & 2-digit number) using shared GEOMETRY_CACHE
     const spineBone = bonesMap['Spine2_04'] || bonesMap['Spine1_03'];
     if (spineBone) {
-      const badgeGeom = new THREE.PlaneGeometry(0.24, 0.28);
       const badgeMat = createJerseyBackBadge(playerObj.userData?.player, playerObj.userData?.team);
-      const badgeMesh = new THREE.Mesh(badgeGeom, badgeMat);
+      const badgeMesh = new THREE.Mesh(GEOMETRY_CACHE.jerseyBadge, badgeMat);
       badgeMesh.position.set(0, 0.02, -0.115);
       badgeMesh.rotation.y = Math.PI; // Face outwards toward the back
       spineBone.add(badgeMesh);
@@ -1605,6 +1646,19 @@ export class CharacterManager {
 
     // Add to player's main world group (shares position, orientation, and physics anchor)
     playerObj.group.add(cloned);
+
+    // Apply initial role-appropriate stance to the animation controller
+    if (playerObj.isBatsman) {
+      playerObj.animController.applyStance('BATSMAN_STANCE');
+    } else if (playerObj.isKeeper) {
+      playerObj.animController.applyStance('KEEPER_CROUCH');
+    } else if (playerObj === this.bowler) {
+      playerObj.animController.applyStance('BOWLER_READY');
+    } else if (playerObj === this.nonStriker) {
+      playerObj.animController.applyStance('NON_STRIKER_STANCE');
+    } else {
+      playerObj.animController.applyStance('FIELDER_READY');
+    }
 
     // Apply team kit appearance
     this.applyRiggedPlayerAppearance(playerObj, playerObj.userData?.player, playerObj.userData?.team);
@@ -1697,70 +1751,11 @@ export class CharacterManager {
     }
   }
 
-  // Safe animation adapter: applies subtle, stable stance offsets to the 83-bone rig without corrupting bind pose
+  // Safe animation adapter: delegates to RiggedAnimationController for kinematic stability
   applyRiggedStance(playerObj, stanceType) {
-    if (!playerObj || !playerObj.riggedBones) return;
-
-    const bones = playerObj.riggedBones;
-    const applyOffset = (bone, dx = 0, dy = 0, dz = 0) => {
-      if (!bone) return;
-      if (!bone.userData.initialRot) {
-        bone.userData.initialRot = bone.rotation.clone();
-      }
-      const init = bone.userData.initialRot;
-      bone.rotation.x = init.x + dx;
-      bone.rotation.y = init.y + dy;
-      bone.rotation.z = init.z + dz;
-    };
-
-    const leftLeg = bones['LeftUpLeg_057'];
-    const leftKnee = bones['LeftLeg_058'];
-    const rightLeg = bones['RightUpLeg_062'];
-    const rightKnee = bones['RightLeg_063'];
-    const leftArm = bones['LeftArm_011'];
-    const leftForearm = bones['LeftForeArm_012'];
-    const rightArm = bones['RightArm_034'];
-    const rightForearm = bones['RightForeArm_035'];
-    const spine = bones['Spine_02'];
-
-    if (stanceType === 'BATSMAN_STANCE') {
-      applyOffset(leftLeg, -0.15, 0, 0.05);
-      applyOffset(leftKnee, 0.25, 0, 0);
-      applyOffset(rightLeg, -0.1, 0, -0.05);
-      applyOffset(rightKnee, 0.2, 0, 0);
-      applyOffset(leftArm, 0.4, 0, -0.2);
-      applyOffset(leftForearm, -0.3, 0, 0);
-      applyOffset(rightArm, 0.45, 0, 0.15);
-      applyOffset(rightForearm, -0.3, 0, 0);
-      applyOffset(spine, 0, -0.2, 0);
-    } else if (stanceType === 'NON_STRIKER_STANCE') {
-      applyOffset(leftArm, 0.2, 0, 0);
-      applyOffset(rightArm, 0.2, 0, 0);
-    } else if (stanceType === 'BOWLER_READY') {
-      // Balanced upright stance
-      applyOffset(leftLeg, 0, 0, 0);
-      applyOffset(leftKnee, 0, 0, 0);
-      applyOffset(rightLeg, 0, 0, 0);
-      applyOffset(rightKnee, 0, 0, 0);
-      applyOffset(leftArm, 0.1, 0, 0);
-      applyOffset(rightArm, 0.1, 0, 0);
-      applyOffset(spine, 0, 0, 0);
-    } else if (stanceType === 'KEEPER_CROUCH') {
-      applyOffset(leftLeg, -0.4, 0, 0.15);
-      applyOffset(leftKnee, 0.65, 0, 0);
-      applyOffset(rightLeg, -0.4, 0, -0.15);
-      applyOffset(rightKnee, 0.65, 0, 0);
-      applyOffset(leftArm, 0.35, 0, -0.2);
-      applyOffset(rightArm, 0.35, 0, 0.2);
-      applyOffset(spine, 0.15, 0, 0);
-    } else if (stanceType === 'FIELDER_READY') {
-      applyOffset(leftLeg, -0.2, 0, 0.05);
-      applyOffset(leftKnee, 0.3, 0, 0);
-      applyOffset(rightLeg, -0.2, 0, -0.05);
-      applyOffset(rightKnee, 0.3, 0, 0);
-      applyOffset(leftArm, 0.25, 0, -0.1);
-      applyOffset(rightArm, 0.25, 0, 0.1);
-      applyOffset(spine, 0.08, 0, 0);
+    if (!playerObj) return;
+    if (playerObj.animController) {
+      playerObj.animController.applyStance(stanceType);
     }
   }
 
@@ -1768,15 +1763,17 @@ export class CharacterManager {
   disposePlayerRiggedModel(playerObj) {
     if (!playerObj || !playerObj.riggedModel) return;
 
+    if (playerObj.animController) {
+      playerObj.animController.resetToRest();
+      playerObj.animController = null;
+    }
+
     if (playerObj.riggedJerseyBadge) {
       if (playerObj.riggedJerseyBadge.material?.map) {
         playerObj.riggedJerseyBadge.material.map.dispose();
       }
       if (playerObj.riggedJerseyBadge.material) {
         playerObj.riggedJerseyBadge.material.dispose();
-      }
-      if (playerObj.riggedJerseyBadge.geometry) {
-        playerObj.riggedJerseyBadge.geometry.dispose();
       }
       playerObj.riggedJerseyBadge = null;
     }
