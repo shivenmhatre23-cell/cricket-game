@@ -3,7 +3,7 @@ import { createStadium } from './scene/stadium.js';
 import { CharacterManager } from './scene/characters.js';
 import { BallPhysics } from './physics/ballPhysics.js';
 import { CameraManager, CAMERA_MODES } from './scene/cameras.js';
-import { GameState, GAME_STATES } from './gameState.js';
+import { GameState, GAME_STATES, BATTING_SHOTS } from './gameState.js';
 import { FieldingAI } from './ai/fieldingAI.js';
 import { HUD } from './ui/hud.js';
 import { MenuManager } from './ui/menus.js';

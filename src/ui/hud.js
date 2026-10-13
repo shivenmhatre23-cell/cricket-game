@@ -257,10 +257,15 @@ export class HUD {
   showFeedback(text, type = 'GOOD') {
     const fb = document.getElementById('meter-feedback');
     if (!fb) return;
+    if (this.feedbackTimeout) {
+      clearTimeout(this.feedbackTimeout);
+      this.feedbackTimeout = null;
+    }
     fb.textContent = text;
     fb.className = `meter-feedback active type-${type.toLowerCase()}`;
-    setTimeout(() => {
+    this.feedbackTimeout = setTimeout(() => {
       fb.classList.remove('active');
+      this.feedbackTimeout = null;
     }, 2500);
   }
 
@@ -386,7 +391,8 @@ export class HUD {
         let cls = 'badge-dot';
         if (badge === '4') cls = 'badge-four';
         else if (badge === '6') cls = 'badge-six';
-        else if (badge === 'W') cls = 'badge-wicket';
+        else if (badge.includes('W') && !badge.includes('WD')) cls = 'badge-wicket';
+        else if (badge.includes('WD') || badge.includes('NB')) cls = 'badge-run';
         else if (badge !== '0') cls = 'badge-run';
         return `<span class="over-badge ${cls}">${badge}</span>`;
       }).join('');

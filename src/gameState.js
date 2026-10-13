@@ -238,10 +238,19 @@ export class GameState {
   }
 
   resetInnings() {
-    this.rulesEngine.initRosters();
+    if (this.rulesEngine && typeof this.rulesEngine.resetMatch === 'function') {
+      this.rulesEngine.resetMatch();
+    } else {
+      this.initMatch(this.userTeamIndex, this.opponentTeamIndex, this.totalOvers);
+    }
     if (this.bowlingAI && typeof this.bowlingAI.reset === 'function') {
       this.bowlingAI.reset();
     }
+  }
+
+  resetMatch() {
+    this.resetInnings();
+    this.setState(GAME_STATES.READY);
   }
 
   applyTossDecision(userBatsFirst = true) {
@@ -256,6 +265,10 @@ export class GameState {
       team1,
       team2
     });
+
+    if (this.bowlingAI && typeof this.bowlingAI.reset === 'function') {
+      this.bowlingAI.reset();
+    }
   }
 
   swapBattingSides() {

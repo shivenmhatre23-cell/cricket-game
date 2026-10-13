@@ -69,6 +69,36 @@ export class CricketRulesEngine {
     this.initRosters();
   }
 
+  resetMatch() {
+    this.currentInningsNumber = 1;
+    this.battingTeam = this.team1;
+    this.bowlingTeam = this.team2;
+    this.target = null;
+    this.isMatchOver = false;
+    this.innings1Card = null;
+    this.innings2Card = null;
+    this.resetInningsState();
+  }
+
+  resetInningsState() {
+    this.runs = 0;
+    this.wickets = 0;
+    this.completedOvers = 0;
+    this.legalBallsInOver = 0;
+    this.totalLegalBalls = 0;
+    this.totalDeliveriesBowled = 0;
+    this.extras = { wides: 0, noBalls: 0, legByes: 0, byes: 0, total: 0 };
+    this.thisOverBalls = [];
+    this.lastDeliveryResult = null;
+    this.strikerIndex = 0;
+    this.nonStrikerIndex = 1;
+    this.currentBowlerIndex = 9;
+    this.previousBowlerIndex = null;
+    this.currentOverRunsConceded = 0;
+    this.processedDeliveries.clear();
+    this.initRosters();
+  }
+
   initRosters() {
     this.batterStats = this.battingTeam.players.map((p, idx) => ({
       index: idx,
@@ -367,20 +397,7 @@ export class CricketRulesEngine {
       this.bowlingTeam = temp;
 
       // Reset innings state
-      this.runs = 0;
-      this.wickets = 0;
-      this.completedOvers = 0;
-      this.legalBallsInOver = 0;
-      this.totalLegalBalls = 0;
-      this.totalDeliveriesBowled = 0;
-      this.extras = { wides: 0, noBalls: 0, legByes: 0, byes: 0, total: 0 };
-      this.thisOverBalls = [];
-      this.strikerIndex = 0;
-      this.nonStrikerIndex = 1;
-      this.currentBowlerIndex = 9;
-      this.previousBowlerIndex = null;
-      this.currentOverRunsConceded = 0;
-      this.initRosters();
+      this.resetInningsState();
 
       return {
         success: true,
