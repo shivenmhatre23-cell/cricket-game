@@ -344,4 +344,157 @@ export class RiggedAnimationController {
       this.applyOffset(this.spine, 0.3 * (1 - t), 0, 0);
     }
   }
+
+  // --- 5. Locomotion & Running Animation (Phase 13.9) ---
+  playLocomotion(cycleTime, speed = 6.0, isBatsman = false) {
+    this.activeAnimation = 'LOCOMOTION';
+    this.isPlaying = true;
+
+    const strideCycle = Math.sin(cycleTime);
+    const speedNorm = Math.min(1.4, Math.max(0.6, speed / 6.5));
+    const legAmp = 0.62 * speedNorm;
+    const armAmp = 0.58 * speedNorm;
+
+    // Leg stride alternation
+    this.applyOffset(this.leftUpLeg, strideCycle * legAmp, 0, 0);
+    this.applyOffset(this.leftLeg, Math.max(0, -strideCycle * legAmp * 0.95), 0, 0);
+    this.applyOffset(this.rightUpLeg, -strideCycle * legAmp, 0, 0);
+    this.applyOffset(this.rightLeg, Math.max(0, strideCycle * legAmp * 0.95), 0, 0);
+
+    if (isBatsman) {
+      // Batsman carries bat anchored to right hand in athletic sprint
+      this.applyOffset(this.rightArm, 0.45 + strideCycle * 0.18, 0, 0.15);
+      this.applyOffset(this.rightForearm, -0.4, 0, 0);
+      this.applyOffset(this.leftArm, -strideCycle * armAmp * 0.9, 0, -0.15);
+      this.applyOffset(this.leftForearm, -0.35, 0, 0);
+    } else {
+      // Fielder sprint with opposing arm pumps
+      this.applyOffset(this.leftArm, -strideCycle * armAmp, 0, 0.15);
+      this.applyOffset(this.leftForearm, -0.4, 0, 0);
+      this.applyOffset(this.rightArm, strideCycle * armAmp, 0, -0.15);
+      this.applyOffset(this.rightForearm, -0.4, 0, 0);
+    }
+
+    // Athletic torso rhythm: forward lean proportional to speed and subtle twist
+    this.applyOffset(this.spine, 0.12 * speedNorm, strideCycle * 0.05, 0);
+    this.applyOffset(this.head, -0.06 * speedNorm, 0, 0);
+  }
+
+  // --- 6. Fielding Catch Animation ---
+  playFielderCatch(progress = 1.0) {
+    const p = Math.max(0, Math.min(1.0, progress));
+    this.activeAnimation = 'FIELDER_CATCH';
+    this.isPlaying = true;
+
+    // Athletic base with bent knees
+    this.applyOffset(this.leftUpLeg, -0.35 * p, 0, 0.1);
+    this.applyOffset(this.leftLeg, 0.55 * p, 0, 0);
+    this.applyOffset(this.rightUpLeg, -0.35 * p, 0, -0.1);
+    this.applyOffset(this.rightLeg, 0.55 * p, 0, 0);
+
+    // Torso forward lean
+    this.applyOffset(this.spine, 0.18 * p, 0, 0);
+
+    // Cupped hands at chest height ready to absorb ball
+    this.applyOffset(this.leftArm, 0.65 * p, 0, -0.25 * p);
+    this.applyOffset(this.leftForearm, -0.7 * p, 0, 0);
+    this.applyOffset(this.rightArm, 0.65 * p, 0, 0.25 * p);
+    this.applyOffset(this.rightForearm, -0.7 * p, 0, 0);
+    this.applyOffset(this.leftHand, 0.1 * p, 0, 0.2 * p);
+    this.applyOffset(this.rightHand, 0.1 * p, 0, -0.2 * p);
+  }
+
+  // --- 7. Ground Ball Pickup Animation ---
+  playFielderPickup(progress = 0.5) {
+    const p = Math.max(0, Math.min(1.0, progress));
+    this.activeAnimation = 'FIELDER_PICKUP';
+    this.isPlaying = true;
+
+    if (p < 0.5) {
+      // Phase A: Bend and reach low
+      const t = p / 0.5;
+      this.applyOffset(this.spine, 0.45 * t, 0, 0);
+      this.applyOffset(this.leftUpLeg, -0.48 * t, 0, 0.08);
+      this.applyOffset(this.leftLeg, 0.78 * t, 0, 0);
+      this.applyOffset(this.rightUpLeg, 0.18 * t, 0, -0.08);
+      this.applyOffset(this.rightLeg, 0.28 * t, 0, 0);
+      this.applyOffset(this.rightArm, 0.92 * t, 0, 0.05);
+      this.applyOffset(this.rightForearm, -0.22 * t, 0, 0);
+      this.applyOffset(this.leftArm, 0.3 * t, 0, -0.1);
+    } else {
+      // Phase B: Scoop into body and rise
+      const t = (p - 0.5) / 0.5;
+      this.applyOffset(this.spine, 0.45 * (1 - t), 0, 0);
+      this.applyOffset(this.leftUpLeg, -0.48 * (1 - t), 0, 0.05);
+      this.applyOffset(this.leftLeg, 0.78 * (1 - t), 0, 0);
+      this.applyOffset(this.rightUpLeg, 0.18 * (1 - t), 0, -0.05);
+      this.applyOffset(this.rightLeg, 0.28 * (1 - t), 0, 0);
+      this.applyOffset(this.rightArm, 0.92 * (1 - t) + 0.3 * t, 0, 0.1 * t);
+      this.applyOffset(this.rightForearm, -0.55 * t, 0, 0);
+      this.applyOffset(this.leftArm, 0.3 * (1 - t), 0, -0.05);
+    }
+  }
+
+  // --- 8. Overarm Return Throw Animation ---
+  playFielderThrow(progress = 0.5) {
+    const p = Math.max(0, Math.min(1.0, progress));
+    this.activeAnimation = 'FIELDER_THROW';
+    this.isPlaying = true;
+
+    if (p < 0.35) {
+      // Cocking / wind-up phase
+      const t = p / 0.35;
+      this.applyOffset(this.rightArm, 0.3 + 1.25 * t, 0, -0.35 * t);
+      this.applyOffset(this.rightForearm, -0.6 * t, 0, 0);
+      this.applyOffset(this.spine, 0.05, 0.32 * t, 0);
+      this.applyOffset(this.leftArm, -0.5 * t, 0, 0.25 * t);
+      this.applyOffset(this.leftUpLeg, -0.2 * t, 0, 0);
+      this.applyOffset(this.leftLeg, 0.2 * t, 0, 0);
+    } else if (p < 0.68) {
+      // Forward release arc
+      const t = (p - 0.35) / 0.33;
+      this.applyOffset(this.rightArm, 1.55 - 2.85 * t, 0, -0.35 + 0.55 * t);
+      this.applyOffset(this.rightForearm, -0.6 * (1 - t), 0, 0);
+      this.applyOffset(this.spine, 0.05 + 0.28 * t, 0.32 * (1 - t), 0);
+      this.applyOffset(this.leftArm, -0.5 + 1.1 * t, 0, 0.25);
+      this.applyOffset(this.leftUpLeg, -0.2 - 0.15 * t, 0, 0);
+      this.applyOffset(this.leftLeg, 0.25, 0, 0);
+      this.applyOffset(this.rightUpLeg, 0.25 * t, 0, 0);
+    } else {
+      // Follow-through and deceleration
+      const t = (p - 0.68) / 0.32;
+      this.applyOffset(this.rightArm, -1.3 + 1.45 * t, 0, 0.2 * (1 - t));
+      this.applyOffset(this.rightForearm, -0.3 * (1 - t), 0, 0);
+      this.applyOffset(this.spine, 0.33 * (1 - t), 0, 0);
+      this.applyOffset(this.leftArm, 0.6 * (1 - t), 0, 0.1);
+      this.applyOffset(this.leftUpLeg, -0.35 * (1 - t), 0, 0);
+      this.applyOffset(this.leftLeg, 0.25 * (1 - t), 0, 0);
+      this.applyOffset(this.rightUpLeg, 0.25 * (1 - t), 0, 0);
+    }
+  }
+
+  // --- 9. Wicketkeeper Lateral & Collection Reaction ---
+  playKeeperReaction(progress = 1.0, ballX = 0) {
+    const p = Math.max(0, Math.min(1.0, progress));
+    this.activeAnimation = 'KEEPER_REACTION';
+    this.isPlaying = true;
+
+    const clampedX = Math.max(-1.2, Math.min(1.2, ballX));
+
+    // Torso leans toward path of delivery
+    this.applyOffset(this.spine, 0.15 * p, clampedX * 0.16 * p, 0);
+
+    // Deep crouch legs remain agile
+    this.applyOffset(this.leftUpLeg, -0.42 * p, 0, 0.15);
+    this.applyOffset(this.leftLeg, 0.7 * p, 0, 0);
+    this.applyOffset(this.rightUpLeg, -0.42 * p, 0, -0.15);
+    this.applyOffset(this.rightLeg, 0.7 * p, 0, 0);
+
+    // Gloves raised into catching corridor
+    this.applyOffset(this.leftArm, 0.58 * p, 0, -0.2 + clampedX * 0.1 * p);
+    this.applyOffset(this.leftForearm, -0.65 * p, 0, 0);
+    this.applyOffset(this.rightArm, 0.58 * p, 0, 0.2 + clampedX * 0.1 * p);
+    this.applyOffset(this.rightForearm, -0.65 * p, 0, 0);
+    this.applyOffset(this.head, 0, clampedX * 0.25 * p, 0);
+  }
 }

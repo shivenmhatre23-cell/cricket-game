@@ -254,10 +254,10 @@ class CricketGame {
     this.hasAttemptedShot = false;
     this.hasDeliveredBall = false;
     this.lastTimingQuality = null;
-    this.characters.resetBatter();
+    this.characters.resetRunningBetweenWickets?.();
+    this.characters.resetAllPlayerStances?.();
     this.characters.strikerStumps.reset();
     this.characters.nonStrikerStumps?.reset();
-    this.characters.setKeeperStance();
 
     // Synchronize 3D player models with active striker, non-striker, bowler, and fielders
     if (typeof this.characters.updateActivePlayers === 'function') {
@@ -532,6 +532,11 @@ class CricketGame {
         this.gameState.difficulty
       );
 
+      // Start running between wickets for scoring strokes
+      if (this.currentShotData?.id !== 'DEFENSIVE') {
+        this.characters.startRunningBetweenWickets?.(1);
+      }
+
       // Switch to dynamic ball follow cam for powerful or lofted shots
       if (timingQuality === 'PERFECT' || this.currentShotData.id === 'LOFTED_ATTACK') {
         if (this.cameraManager.currentMode === CAMERA_MODES.BROADCAST_BATTING || this.cameraManager.currentMode === CAMERA_MODES.BOWLER_RUNUP) {
@@ -546,6 +551,7 @@ class CricketGame {
   handleFielderEvent(event) {
     if (event.action === 'CATCH_TAKEN') {
       soundManager.playCheer(1.0, 3.0);
+      this.characters.stopRunningBetweenWickets?.(true);
       this.ballPhysics.finishDelivery({
         outcome: 'WICKET',
         dismissalType: 'Caught',
@@ -554,7 +560,9 @@ class CricketGame {
       }, this.characters, (res) => this.onDeliveryResult(res));
     } else if (event.action === 'CATCH_DROPPED') {
       this.hud.showFeedback(`DROPPED CATCH! 😱 Fumbled by ${event.fielderName}`, 'EARLY');
+      this.characters.startRunningBetweenWickets?.(1);
     } else if (event.action === 'GROUND_PICKUP') {
+      this.characters.startRunningBetweenWickets?.(event.runs);
       this.ballPhysics.finishDelivery({
         outcome: 'RUNS',
         reason: `Fielded cleanly by ${event.fielderName}`,
@@ -566,6 +574,10 @@ class CricketGame {
   }
 
   onDeliveryResult(result) {
+    if (result.outcome === 'WICKET' || result.outcome === 'SIX' || result.outcome === 'FOUR' || result.outcome === 'DOT') {
+      this.characters.stopRunningBetweenWickets?.(true);
+    }
+
     if (this.lastTimingQuality && !result.timingQuality) {
       result.timingQuality = this.lastTimingQuality;
     }

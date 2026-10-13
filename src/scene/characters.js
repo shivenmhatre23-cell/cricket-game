@@ -519,6 +519,9 @@ export class CharacterManager {
     this.isExternalModelLoading = false;
     this.externalModelLoadError = null;
 
+    // Running Between Wickets Locomotion System
+    this.initRunningBetweenWickets();
+
     // Shared base materials
     this.sharedMaterials = {
       skin: new THREE.MeshStandardMaterial({ color: 0xdcae86, roughness: 0.8 }),
@@ -1061,6 +1064,11 @@ export class CharacterManager {
     fielder.runCycle = (fielder.runCycle || 0) + delta * sprintSpeed * 1.8;
     const stride = Math.sin(fielder.runCycle);
 
+    if (this.modelMode === 'RIGGED_GLB' && fielder.animController) {
+      fielder.animController.playLocomotion(fielder.runCycle, sprintSpeed, false);
+      return;
+    }
+
     this.safePos(fielder.hips, 0, 0.88 + Math.abs(stride) * 0.05, 0);
     this.safeRot(fielder.leftLeg?.hip, stride * 0.65, 0, 0);
     this.safeRot(fielder.leftLeg?.knee, Math.max(0, -stride * 0.6), 0, 0);
@@ -1076,6 +1084,10 @@ export class CharacterManager {
   // Cupped hands catch pose
   setFielderCatchStance(fielder) {
     if (!fielder) return;
+    if (this.modelMode === 'RIGGED_GLB' && fielder.animController) {
+      fielder.animController.playFielderCatch(1.0);
+      return;
+    }
     this.safePos(fielder.hips, 0, 0.82, 0);
     this.safeRot(fielder.hips, 0.15, 0, 0);
     this.safeRot(fielder.leftLeg?.hip, -0.3, 0, 0.1);
@@ -1088,6 +1100,36 @@ export class CharacterManager {
     this.safeRot(fielder.rightArm?.elbow, -0.8, 0, 0);
   }
 
+  // Ground ball pickup animation
+  animateFielderPickup(fielder, progress = 0.5) {
+    if (!fielder) return;
+    const p = Math.max(0, Math.min(1.0, progress));
+    if (this.modelMode === 'RIGGED_GLB' && fielder.animController) {
+      fielder.animController.playFielderPickup(p);
+      return;
+    }
+    const bend = Math.sin(p * Math.PI);
+    this.safePos(fielder.hips, 0, 0.88 - bend * 0.35, 0);
+    this.safeRot(fielder.hips, bend * 0.45, 0, 0);
+    this.safeRot(fielder.rightArm?.shoulder, 0.4 + bend * 0.8, 0, 0);
+    this.safeRot(fielder.rightArm?.elbow, -0.3 - bend * 0.3, 0, 0);
+    this.safeRot(fielder.leftLeg?.knee, 0.35 + bend * 0.4, 0, 0);
+  }
+
+  // Overarm return throw animation
+  animateFielderThrow(fielder, progress = 0.5) {
+    if (!fielder) return;
+    const p = Math.max(0, Math.min(1.0, progress));
+    if (this.modelMode === 'RIGGED_GLB' && fielder.animController) {
+      fielder.animController.playFielderThrow(p);
+      return;
+    }
+    const throwSwing = Math.sin(p * Math.PI);
+    this.safeRot(fielder.rightArm?.shoulder, 0.4 - p * 1.8, 0, 0.2);
+    this.safeRot(fielder.rightArm?.elbow, -0.3 - (1 - p) * 0.4, 0, 0);
+    this.safeRot(fielder.leftArm?.shoulder, 0.2 + throwSwing * 0.4, 0, -0.2);
+  }
+
   // Wicketkeeper tracks ball approaching and passing striker crease
   animateKeeper(ballPos, delta) {
     const k = this.keeper;
@@ -1097,6 +1139,10 @@ export class CharacterManager {
       // Ball approaching or passing keeper: track laterally and rise slightly
       const targetX = Math.max(-1.2, Math.min(1.2, ballPos.x));
       k.group.position.x = THREE.MathUtils.lerp(k.group.position.x, targetX * 0.7, Math.min(1.0, delta * 6.0));
+      if (this.modelMode === 'RIGGED_GLB' && k.animController) {
+        k.animController.playKeeperReaction(1.0, ballPos.x);
+        return;
+      }
       this.safePos(k.hips, 0, 0.78, 0);
       this.safeRot(k.leftArm?.shoulder, 0.6, 0, -0.15);
       this.safeRot(k.rightArm?.shoulder, 0.6, 0, 0.15);
@@ -1104,6 +1150,152 @@ export class CharacterManager {
       // Return smoothly to crouch stance
       k.group.position.x = THREE.MathUtils.lerp(k.group.position.x, 0, Math.min(1.0, delta * 4.0));
       this.setKeeperStance();
+    }
+  }
+
+  // --- Running Between Wickets Locomotion System ---
+  initRunningBetweenWickets() {
+    this.runningBetweenWickets = {
+      active: false,
+      targetRuns: 0,
+      currentRun: 0,
+      progress: 0, // 0.0 to 1.0 along pitch
+      speed: 6.4,
+      strikerLaneX: -0.35,
+      nonStrikerLaneX: 0.95,
+      creaseNearZ: 9.15,
+      creaseFarZ: -8.6,
+      direction: 1 // 1: striker runs towards -Z, non-striker towards +Z
+    };
+  }
+
+  startRunningBetweenWickets(runs = 1) {
+    if (runs <= 0 || !this.batter || !this.nonStriker) return;
+    if (!this.runningBetweenWickets) this.initRunningBetweenWickets();
+
+    this.runningBetweenWickets.active = true;
+    this.runningBetweenWickets.targetRuns = runs;
+    this.runningBetweenWickets.currentRun = 0;
+    this.runningBetweenWickets.progress = 0;
+    this.runningBetweenWickets.direction = 1;
+
+    // Orient players in sprint direction along their lanes
+    this.batter.group.rotation.y = Math.PI; // Striker runs towards non-striker end (-Z)
+    this.nonStriker.group.rotation.y = 0;    // Non-striker runs towards striker end (+Z)
+  }
+
+  updateRunningBetweenWickets(delta) {
+    const rbw = this.runningBetweenWickets;
+    if (!rbw || !rbw.active) return;
+    if (!this.batter || !this.nonStriker) return;
+
+    const pitchLength = Math.abs(rbw.creaseNearZ - rbw.creaseFarZ); // ~17.75m
+    const step = (rbw.speed / pitchLength) * delta;
+    rbw.progress += step;
+
+    const p = Math.min(1.0, rbw.progress);
+
+    // Compute actual Z positions along pitch for both batsmen
+    if (rbw.direction === 1) {
+      // Striker runs near -> far; Non-striker runs far -> near
+      this.batter.group.position.z = THREE.MathUtils.lerp(rbw.creaseNearZ, rbw.creaseFarZ, p);
+      this.batter.group.position.x = THREE.MathUtils.lerp(0.1, rbw.strikerLaneX, Math.min(1.0, p * 3.0));
+
+      this.nonStriker.group.position.z = THREE.MathUtils.lerp(rbw.creaseFarZ, rbw.creaseNearZ, p);
+      this.nonStriker.group.position.x = THREE.MathUtils.lerp(1.2, rbw.nonStrikerLaneX, Math.min(1.0, p * 3.0));
+    } else {
+      // Striker runs far -> near; Non-striker runs near -> far
+      this.batter.group.position.z = THREE.MathUtils.lerp(rbw.creaseFarZ, rbw.creaseNearZ, p);
+      this.batter.group.position.x = THREE.MathUtils.lerp(rbw.strikerLaneX, 0.1, Math.min(1.0, p * 3.0));
+
+      this.nonStriker.group.position.z = THREE.MathUtils.lerp(rbw.creaseNearZ, rbw.creaseFarZ, p);
+      this.nonStriker.group.position.x = THREE.MathUtils.lerp(rbw.nonStrikerLaneX, 1.2, Math.min(1.0, p * 3.0));
+    }
+
+    // Animate running stride on both batsmen
+    this.animateBatterRun(this.batter, delta, rbw.speed);
+    this.animateBatterRun(this.nonStriker, delta, rbw.speed);
+
+    // Check completion of current run
+    if (rbw.progress >= 1.0) {
+      rbw.currentRun++;
+      if (rbw.currentRun < rbw.targetRuns) {
+        // Turn for next run!
+        rbw.progress = 0;
+        rbw.direction = -rbw.direction;
+        if (rbw.direction === 1) {
+          this.batter.group.rotation.y = Math.PI;
+          this.nonStriker.group.rotation.y = 0;
+        } else {
+          this.batter.group.rotation.y = 0;
+          this.nonStriker.group.rotation.y = Math.PI;
+        }
+      } else {
+        // All runs completed! Stop and settle at creases
+        this.stopRunningBetweenWickets(false);
+      }
+    }
+  }
+
+  animateBatterRun(playerObj, delta, sprintSpeed = 6.4) {
+    if (!playerObj) return;
+    playerObj.runCycle = (playerObj.runCycle || 0) + delta * sprintSpeed * 1.8;
+    const stride = Math.sin(playerObj.runCycle);
+
+    if (this.modelMode === 'RIGGED_GLB' && playerObj.animController) {
+      playerObj.animController.playLocomotion(playerObj.runCycle, sprintSpeed, true);
+      return;
+    }
+
+    // Procedural runner articulation
+    this.safePos(playerObj.hips, 0, 0.9 + Math.abs(stride) * 0.05, 0);
+    this.safeRot(playerObj.leftLeg?.hip, stride * 0.6, 0, 0);
+    this.safeRot(playerObj.leftLeg?.knee, Math.max(0, -stride * 0.55), 0, 0);
+    this.safeRot(playerObj.rightLeg?.hip, -stride * 0.6, 0, 0);
+    this.safeRot(playerObj.rightLeg?.knee, Math.max(0, stride * 0.55), 0, 0);
+    this.safeRot(playerObj.leftArm?.shoulder, -stride * 0.5, 0, -0.15);
+    this.safeRot(playerObj.rightArm?.shoulder, 0.45 + stride * 0.2, 0, 0.15);
+  }
+
+  stopRunningBetweenWickets(resetToDefaultCreases = false) {
+    const rbw = this.runningBetweenWickets;
+    if (rbw) rbw.active = false;
+
+    if (resetToDefaultCreases) {
+      if (this.batter) {
+        this.batter.group.position.set(0.1, 0, 9.15);
+        this.batter.group.rotation.y = Math.PI * 0.5;
+        this.resetBatter();
+      }
+      if (this.nonStriker) {
+        this.nonStriker.group.position.set(1.2, 0, -8.6);
+        this.nonStriker.group.rotation.y = 0;
+        this.setNonStrikerStance();
+      }
+    } else {
+      // Settle batsmen at their respective end
+      if (this.batter) {
+        this.batter.group.rotation.y = Math.PI * 0.5;
+        this.resetBatter();
+      }
+      if (this.nonStriker) {
+        this.nonStriker.group.rotation.y = 0;
+        this.setNonStrikerStance();
+      }
+    }
+  }
+
+  resetRunningBetweenWickets() {
+    this.stopRunningBetweenWickets(true);
+  }
+
+  resetAllPlayerStances() {
+    if (this.batter) this.resetBatter();
+    if (this.nonStriker) this.setNonStrikerStance();
+    if (this.bowler) this.setBowlerReadyStance();
+    if (this.keeper) this.setKeeperStance();
+    if (this.fielders) {
+      this.fielders.forEach(f => this.setFielderStance(f));
     }
   }
 
@@ -1400,8 +1592,10 @@ export class CharacterManager {
     }
   }
 
-  // Update characters, wicketkeeper, physical wickets and bails
+  // Update characters, wicketkeeper, running between wickets, physical wickets and bails
   update(delta, ballPos = null) {
+    this.updateRunningBetweenWickets(delta);
+
     if (this.keeper && ballPos) {
       this.animateKeeper(ballPos, delta);
     }

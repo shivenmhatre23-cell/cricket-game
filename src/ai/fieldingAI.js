@@ -132,10 +132,18 @@ export class FieldingAI {
       ball.position.copy(currentPos);
       ball.mesh.position.copy(currentPos);
 
+      if (this.activeChaser && characters && typeof characters.animateFielderThrow === 'function') {
+        characters.animateFielderThrow(this.activeChaser, this.throwProgress);
+      }
+
       if (this.throwProgress >= 1.0) {
         this.isThrowing = false;
         ball.inPlay = false;
         ball.isDead = true;
+
+        if (this.activeChaser && characters && typeof characters.setFielderStance === 'function') {
+          characters.setFielderStance(this.activeChaser);
+        }
 
         if (onFielderAction) {
           onFielderAction({
@@ -245,6 +253,10 @@ export class FieldingAI {
           // Ball to fielder hands
           ball.position.set(fPos.x, 0.5, fPos.z);
           ball.mesh.position.copy(ball.position);
+
+          if (characters && typeof characters.animateFielderPickup === 'function') {
+            characters.animateFielderPickup(closest, 0.5);
+          }
 
           // Choose closest wickets to throw to (Keeper wickets at Z=10.06 or Bowler wickets at Z=-10.06)
           const distToStrikerWickets = bPos.distanceTo(new THREE.Vector3(0, 0.7, 10.06));
